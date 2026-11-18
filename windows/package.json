@@ -1,0 +1,53 @@
+{
+  "name": "iris-windows",
+  "productName": "Iris",
+  "version": "1.0.0",
+  "description": "Iris by AriZe \u2014 Windows edition",
+  "author": "AriZe",
+  "license": "UNLICENSED",
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^42.0.0",
+    "electron-builder": "^26.0.0",
+    "png-to-ico": "^3.0.2",
+    "resedit": "^3.1.1"
+  },
+  "dependencies": {
+    "dompurify": "^3.3.0",
+    "marked": "^17.0.0"
+  },
+  "build": {
+    "appId": "com.arize.iris.windows",
+    "productName": "Iris",
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false,
+      "artifactName": "Iris-Windows-1.0-Setup.exe",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    },
+    "afterPack": "./icon-hook.cjs"
+  }
+}

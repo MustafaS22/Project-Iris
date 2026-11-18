@@ -1,0 +1,2 @@
+# Iris visual system
+Ink #111110, paper #F5F2EB, ash #8E8B83, apricot #E8B889, sage #AABAA4. Native semantic colors on the desktop, near-black notch with warm ivory text. SF Pro body, system serif display, monospaced timer. Spacing 4/8/16/24/32/48; corners 12/20/28. One signature: an expressive pair of warm apertures inhabits the black notch. No imported avatar, neon, decorative waveform, or unrelated dashboard. Theme changes affect the accent, not functionality.

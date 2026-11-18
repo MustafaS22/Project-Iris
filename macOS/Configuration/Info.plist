@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Iris reads selected Notes and Mail inboxes when you connect them, and runs approved Spotify and Terminal actions.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Iris imports events from calendars you select to personalize your knowledge. Nothing is changed in Calendar.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Iris imports open reminders from lists you select. Iris does not edit your reminders.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Iris reads a selected app only when you ask for screen guidance or screen reading.</string>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
+	<key>SUFeedURL</key>
+	<string>https://projectiris.lovelyabbey.chatgpt.site/api/appcast</string>
+	<key>SUPublicEDKey</key>
+	<string>rmgj2iCA3wUXkyQvlRkwFYv/JnNFFHRPhXjradcwU3s=</string>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+</dict>
+</plist>
