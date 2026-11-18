@@ -2,7 +2,8 @@
   "files": {
     ".gitignore": "a0e0c730b733f075798be83a2b2404bd658e1ff72a2536ff88bf417669f738ca",
     "AGENTS.md": "56879ec59e840a30a3f21955d91647f5d8a5ea40cd7e7524d898571beeb70021",
-    "README.md": "0123dd439f52f6d10c75a9316f938484507b2d3b8160b3c22f4665367556b40f",
+    "README.md": "42a70aa8e4c424eb547734e8e793b9cbfbc1e2c4f2f3e8394bb8cbd59e760575",
+    "docs/readme/banner.jpg": "524e4bb984673a48fb530bc109972d106d198080887b13a2ffb30f19c57d50b7",
     "docs/screenshots/assistant.jpg": "d24e64916de3123b3ce8f7c9a20700b058b2b3191fd3752fa7138648ff3f4de2",
     "docs/screenshots/knowledge.jpg": "eb528abbd617f56779b4ef483d0d2139913c7c36758684a3ec24bc2231c92ba5",
     "docs/screenshots/notch.jpg": "cdbeaec529b2080cf5d908078e25886f45d0e283ff3c901f1495d729b994e57c",
@@ -465,7 +466,7 @@
     "tools/package-release.py": "e98b7e12df9fbc164f10f9dd16f57a2c703b89132b1d88736623fe1a205ba6a3",
     "tools/sign-iris-release.py": "8a1f98698389f1b7539b712140a047ab0e8f80f3c696b9a53697333868edb6f5",
     "tools/sync-config.example.json": "576f972c8f898cad5637a932ff374c84b544f9c5899c999f973e5ec5dd9263cd",
-    "tools/sync-source.py": "0024af110cc8bd7007b17e761ff32a342787a3b771a5611119f2f37323653f52",
+    "tools/sync-source.py": "d3536b14011369ec7a247946f25529b0978937661df005edbba8addf8aba413b",
     "windows/AGENTS.md": "c5481c1b00b13751a669d9ff43197900f3aa223f137d791160df8c68e2656302",
     "windows/README.md": "2dfae02b85a14b81f8c35b2c7d15027366c66825b04f7b0ba9b2cabfa654f8f2",
     "windows/assets/icon.ico": "a9372f91e6628a0ba2897877f96c40986b5b501a98038dbbf978e399e7ce4b87",

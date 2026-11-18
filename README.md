@@ -1,38 +1,61 @@
-# Iris by AriZe
+![Iris by AriZe. Your computer. Now with company.](docs/readme/banner.jpg)
 
-A personal AI assistant for your computer: conversation, voice, knowledge, screen guidance, drafting, creation and background agents.
+<h1 align="center">Iris</h1>
 
-- **macOS 2.0.32**: the primary, actively developed app. Open `macOS/Project IRIS.xcodeproj` in Xcode 27.2 or later; Apple Silicon, macOS 15+.
-- **iPhone 1.1 preview**: a separate iOS 18+ companion. See [its guide](iOS/README.md).
-- **Windows 1.0**: a frozen, unsigned test edition, with feature differences and no claim of full Mac parity. See [its guide](windows/README.md).
-- **Website**: maintained separately at [Project-Iris-Website](https://github.com/MustafaS22/Project-Iris-Website).
+<p align="center">An AI assistant you can talk to, type to, or bring alongside your work.</p>
 
-[Download Iris](https://projectiris.lovelyabbey.chatgpt.site/download) · [Release notes](https://projectiris.lovelyabbey.chatgpt.site/releases)
+<p align="center">
+  <a href="https://projectiris.lovelyabbey.chatgpt.site/download"><strong>Download Iris</strong></a> ·
+  <a href="https://projectiris.lovelyabbey.chatgpt.site/#features">See it in action</a> ·
+  <a href="https://projectiris.lovelyabbey.chatgpt.site/releases">Release notes</a> ·
+  <a href="https://github.com/MustafaS22/Project-Iris-Website">Website source</a>
+</p>
 
-## Screenshots
+## Meet Iris
 
-### Desktop chat
+Open the desktop chat for a longer conversation, ask a quick question from the Mac notch, or bring Floating Iris beside the app you’re working in. With screen access and a supported vision model, Iris can point to controls, walk through a diagram, or sketch an explanation.
 
-![Desktop chat](docs/screenshots/assistant.jpg)
+![Iris desktop chat with an animated avatar and creation tools](docs/screenshots/assistant.jpg)
 
-### Notch chat
+| A quick question from the notch | Your sources, organized in Knowledge |
+| :---: | :---: |
+| ![The expanded Iris notch on a Mac desktop](docs/screenshots/notch.jpg) | ![The Iris Knowledge tab with sources and memory scanning](docs/screenshots/knowledge.jpg) |
 
-![Notch chat](docs/screenshots/notch.jpg)
+## What you can do
 
-### Knowledge library
+| Feature | Try it |
+| --- | --- |
+| **Chat and voice** | Speak or type, attach a file, and pick up the conversation later. |
+| **Screen guidance** | Ask Floating Iris to show you where to click or explain something on screen. |
+| **Double Tap drafting** | Start a reply or polish text in the field you’re already using, then review it before sending. |
+| **Knowledge and memory** | Add files, notes, or connections. Type `@` to bring a specific source into chat. |
+| **Create and revisit** | Ask Iris to make a website, document, or image. Reopen saved work from the Library. |
+| **Background agents** | Give a longer job to a specialist and follow its progress while you work. |
 
-![Knowledge library](docs/screenshots/knowledge.jpg)
+## Get Iris
+
+| Platform | Availability |
+| --- | --- |
+| **macOS** | The main app for Apple Silicon Macs running macOS 15 or later. New versions are available in **Settings → Updates**. [Download for Mac](https://projectiris.lovelyabbey.chatgpt.site/download?platform=macos) |
+| **iPhone** | A separate companion preview for iOS 18 or later. [Installation guide](https://projectiris.lovelyabbey.chatgpt.site/iphone) · [Source](iOS/) |
+| **Windows** | An unsigned 1.0 test edition with a smaller feature set. [Download and details](https://projectiris.lovelyabbey.chatgpt.site/windows) · [Source](windows/) |
+
+On Mac, open the DMG, drag Iris to Applications, and launch it from there. Onboarding walks through choosing your AI and voice providers, granting the permissions you want to use, and trying the notch, floating mode, and drafting.
 
 ## Build and test
 
-Choose your own Apple signing team in Xcode. Sparkle 2.10.1 resolves through Swift Package Manager. Run core checks with `swift test --package-path macOS/IrisCoreTests` and `swift test --package-path iOS/Tests`; Windows unit checks use `npm ci` then `npm test` in `windows/`.
+Open the [Mac Xcode project](macOS/Project%20IRIS.xcodeproj) in Xcode 27.2 or later and choose your Apple signing team. Xcode resolves Sparkle through Swift Package Manager.
 
-Google sign-in needs your own OAuth registration. Copy `macOS/Configuration/GoogleOAuth.example.json` to `macOS/Project IRIS/GoogleOAuth.json` and configure your registered desktop client. The real OAuth configuration, API keys, user memory/knowledge, signing private keys, profiles, local build outputs and downloaded reference projects are intentionally excluded.
+```sh
+swift test --package-path macOS/IrisCoreTests
+swift test --package-path iOS/Tests
+(cd windows && npm ci && npm test)
+```
 
-## Release updates
+For Google sign-in, copy the [example OAuth configuration](macOS/Configuration/GoogleOAuth.example.json) to `macOS/Project IRIS/GoogleOAuth.json` and use your own registered desktop client. Provider credentials, signing keys, and personal chat and knowledge data are excluded from the repository.
 
-Public source is synchronized at release time. The maintainers use `tools/sync-source.py` with a local path configuration; see `tools/sync-config.example.json`. `SOURCE_MANIFEST.json` records the exact public source snapshot. Signing keys stay in macOS Keychain. Source synchronization never changes the working app or user data.
+## Project links
 
-## Credits and licensing
+[Report an app issue](https://github.com/MustafaS22/Project-Iris/issues) · [Privacy](https://projectiris.lovelyabbey.chatgpt.site/privacy) · [Source manifest](SOURCE_MANIFEST.json) · [Release tooling](tools/)
 
-Developed by **AriZe**. Existing third-party attribution and asset licenses remain with their corresponding files. No additional blanket open-source license is granted by this repository.
+Built by **AriZe**. Third-party assets and dependencies retain their own terms. This repository carries no additional blanket license.
