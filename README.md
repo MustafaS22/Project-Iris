@@ -9,6 +9,20 @@ A personal AI assistant for your computer: conversation, voice, knowledge, scree
 
 [Download Iris](https://projectiris.lovelyabbey.chatgpt.site/download) · [Release notes](https://projectiris.lovelyabbey.chatgpt.site/releases)
 
+## Screenshots
+
+### Desktop chat
+
+![Desktop chat](docs/screenshots/assistant.jpg)
+
+### Notch chat
+
+![Notch chat](docs/screenshots/notch.jpg)
+
+### Knowledge library
+
+![Knowledge library](docs/screenshots/knowledge.jpg)
+
 ## Build and test
 
 Choose your own Apple signing team in Xcode. Sparkle 2.10.1 resolves through Swift Package Manager. Run core checks with `swift test --package-path macOS/IrisCoreTests` and `swift test --package-path iOS/Tests`; Windows unit checks use `npm ci` then `npm test` in `windows/`.
