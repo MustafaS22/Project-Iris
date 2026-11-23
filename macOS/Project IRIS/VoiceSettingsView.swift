@@ -17,11 +17,19 @@ struct VoiceSettingsView: View {
                 VStack(alignment: .leading, spacing: 5) { Text("A voice that feels right").font(.title2.weight(.semibold)); Text("Choose how Iris sounds, independently of your chat model.").foregroundStyle(IrisDesign.secondary) }
             }
             HStack(spacing: 12) {
+                Button { changeProvider("fish") } label: { Label("Simonne", systemImage: provider == "fish" ? "checkmark.circle.fill" : "circle") }.buttonStyle(IrisActionStyle(primary: provider == "fish"))
                 Button { changeProvider("gemini") } label: { Label("Gemini", systemImage: provider == "gemini" ? "checkmark.circle.fill" : "circle") }.buttonStyle(IrisActionStyle(primary: provider == "gemini"))
                 Button { changeProvider("voicebox") } label: { Label("VoiceBox · Local AI", systemImage: natural ? "checkmark.circle.fill" : "circle") }.buttonStyle(IrisActionStyle(primary: natural))
                 Button { changeProvider("system") } label: { Label("macOS voices", systemImage: provider == "system" ? "checkmark.circle.fill" : "circle") }.buttonStyle(IrisActionStyle(primary: provider == "system"))
             }
-            if provider == "gemini" { GeminiVoiceSettings(iris: iris) }
+            if provider == "fish" {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Simonne · Fish Audio").font(.headline)
+                    Text("A shared voice for Iris. Your reply text is sent to Fish Audio through AriZe’s voice service. An internet connection is required.").foregroundStyle(IrisDesign.secondary)
+                    Text("No API key needed. Shared usage limits apply. If the free service is unavailable, Iris keeps your text reply.").font(.caption).foregroundStyle(IrisDesign.secondary)
+                }
+            }
+            else if provider == "gemini" { GeminiVoiceSettings(iris: iris) }
             else if natural {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack { Text("VoiceBox connection").font(.headline); Spacer(); Button("Open VoiceBox", systemImage: "arrow.up.right") { openVoiceBox() } }

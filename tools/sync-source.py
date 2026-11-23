@@ -7,7 +7,7 @@ import argparse,hashlib,json,re,shutil,subprocess
 SKIP_DIRS={'.git','.agents','.codex','.build','build','release-build','node_modules','dist','out','packaging','SourcePackages','xcuserdata','.next','.vinext','.wrangler','.sites-runtime','coverage','__pycache__','Source Material'}
 SKIP_NAMES={'.DS_Store','GoogleOAuth.json','ReleaseSigning.json','state.json','agents.json','knowledge.sqlite','knowledge.sqlite-shm','knowledge.sqlite-wal','next-env.d.ts','skills-lock.json'}
 SKIP_EXT={'.log','.dmg','.ipa','.exe','.app','.p12','.pfx','.pem','.key','.mobileprovision','.xcuserstate','.tsbuildinfo','.pyc'}
-SECRET=re.compile(r'GOCSPX-[A-Za-z0-9_-]{15,}|sk-proj-[A-Za-z0-9_-]{15,}|github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{30,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----')
+SECRET=re.compile(r'sk-fish-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{15,}|sk-proj-[A-Za-z0-9_-]{15,}|github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{30,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----')
 IGNORE='''# Generated builds and dependencies
 **/node_modules/
 **/.build/

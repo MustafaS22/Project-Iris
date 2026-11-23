@@ -324,9 +324,9 @@ final class IrisOrchestrator: ObservableObject {
         if floatingRequest { floatingReply = "" }
         let shouldSpeak = (!welcome.active || welcome.voiceEnabled) && SpeechReplyPolicy.shouldSpeak(floating: floatingRequest, spoken: spokenRequest, speakVoice: preferences.speakReplies ?? true, speakTyped: preferences.speakTypedReplies ?? false)
         let referenceExplanation = floatingRequest && (DiagramReference.wantsOnline(text) || shared.contains { $0.note?.hasPrefix("diagram-reference:") == true })
-        let streamSpeech = !referenceExplanation && (preferences.voiceProvider ?? "gemini") == "gemini" && (preferences.streamSpokenReplies ?? true) && shouldSpeak
+        let streamSpeech = !referenceExplanation && ["gemini", "fish"].contains(preferences.voiceProvider ?? "gemini") && (preferences.streamSpokenReplies ?? true) && shouldSpeak
         if streamSpeech {
-            voice.beginStreamingReply(voice: preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, model: preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, style: preferences.replySpeechStyle, auth: preferences.geminiSpeechAuth ?? "apiKey", speed: preferences.geminiSpeechSpeed ?? 1, economy: preferences.geminiSpeechEconomy ?? true)
+            voice.beginStreamingReply(voice: preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, model: preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, style: preferences.replySpeechStyle, auth: preferences.geminiSpeechAuth ?? "apiKey", speed: preferences.geminiSpeechSpeed ?? 1, economy: preferences.geminiSpeechEconomy ?? true, provider: preferences.voiceProvider ?? "gemini")
         }
         var sharedScreen = false
         var lastUpdate = Date.distantPast
