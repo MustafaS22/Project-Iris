@@ -42,6 +42,12 @@ Open the desktop chat for a longer conversation, ask a quick question from the M
 
 On Mac, open the DMG, drag Iris to Applications, and launch it from there. Onboarding walks through choosing your AI and voice providers, granting the permissions you want to use, and trying the notch, floating mode, and drafting.
 
+### Simonne voice
+
+Iris 2.0.33 adds **Simonne** in **Settings → Voice & speech**. Select Simonne and press **Preview voice** to try the shared Fish Audio voice. Users can speak with her without entering an API key. Replies can stream as Iris writes, and **Stop** cancels playback.
+
+Simonne requires an internet connection. Reply text passes through AriZe’s voice service to Fish Audio. The service uses the free speech model, with shared request limits and availability governed by Fish Audio. The API key is held in server secret settings. The app source contains the client integration and public service address.
+
 ## Build and test
 
 Open the [Mac Xcode project](macOS/Project%20IRIS.xcodeproj) in Xcode 27.2 or later and choose your Apple signing team. Xcode resolves Sparkle through Swift Package Manager.
