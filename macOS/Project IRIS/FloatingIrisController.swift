@@ -310,11 +310,7 @@ final class FloatingIrisController: ObservableObject {
                         let sentence = String((mark.speech ?? mark.text ?? "This is the highlighted part.").prefix(260))
                         self.iris.speakFloatingReply(sentence)
                         try await self.waitForNarration(id: id)
-                        if self.iris.voice.speechError != nil, self.presentationID == id {
-                            // Never retry quota failures. Keep the guide usable with local speech.
-                            self.iris.voice.speak(sentence, identifier: self.iris.preferences.voiceID, rate: self.iris.preferences.speechRate ?? 0.49, provider: "system")
-                            try await self.waitForNarration(id: id)
-                        }
+
                     } else { try await Task.sleep(for: .milliseconds(500)) }
                     let hasObject = original.marks[range].contains { $0.kind == "object" }
                     let minimumReveal = (hasObject ? 1.15 : 0.60) + Double(range.count - 1) * 0.095
@@ -488,7 +484,7 @@ private struct FloatingIrisView: View {
             .accessibilityHint("Drag to move. Click for controls. \(iris.shortcuts.label(.floatingVoice)) to speak; \(iris.shortcuts.label(.floatingText)) to type.")
             .preferredColorScheme(.dark)
             .onReceive(iris.voice.$speechError) { error in
-                if error != nil, controller.visible, !iris.busy { iris.floatingSpeechFallback() }
+                if error != nil, controller.visible, !iris.busy { iris.reportFloatingSpeechFailure() }
             }
     }
 }

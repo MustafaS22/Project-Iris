@@ -35,7 +35,7 @@ enum ContextReader {
 }
 
 @MainActor
-final class VoiceService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
+final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published var listening = false
     @Published var requesting = false
     private var generation = UUID()
@@ -52,7 +52,6 @@ final class VoiceService: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
     private var speechTask: Task<Void, Never>?
     private var playbackID = UUID()
     private var naturalPlayer: AVAudioPlayer?
-    private var currentUtterance: AVSpeechUtterance?
     private var previewCache: [String: Data] = [:]
     private var replyAudioCache: [String: Data] = [:]
     private var speechQuotaUntil = Date.distantPast
@@ -61,13 +60,12 @@ final class VoiceService: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
     private var streamPlayer: StreamingSpeechPlayer?
     private var capture: VoiceCaptureSession?
     private var recognition: SFSpeechRecognitionTask?
-    private let synthesizer = AVSpeechSynthesizer()
     private var timeout: Task<Void, Never>?
     private var silence: Task<Void, Never>?
     private var lastTranscript = ""
     private static let log = Logger(subsystem: "com.projectiris.Project-IRIS", category: "voice")
     override init() {
-        super.init();synthesizer.delegate=self
+        super.init()
         speechObserver=DistributedNotificationCenter.default().addObserver(forName:NSNotification.Name("com.arize.iris.voice-owner"),object:nil,queue:.main){[weak self] note in
             guard note.object as? String != String(ProcessInfo.processInfo.processIdentifier) else{return}
             Task{@MainActor in self?.stopSpeaking()}
@@ -234,7 +232,8 @@ final class VoiceService: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
         if !chunks.isEmpty, !speaking { preparingSpeech = true }
         if final { replyContinuation?.finish(); replyContinuation = nil; replyChunker = nil }
     }
-    func speak(_ text: String, identifier: String? = nil, rate: Float = 0.49, provider: String = "system", server: String = VoiceBoxClient.defaultServer, profile: String? = nil, speed: Double = 1, preview: Bool = false, geminiVoice: String = GeminiSpeechClient.defaultVoice, geminiModel: String = GeminiSpeechClient.defaultModel, geminiStyle: String = "Natural", geminiAuth: String = "apiKey", economy: Bool = true) {
+    func speak(_ text: String, identifier: String? = nil, rate: Float = 0.49, provider: String = "fish", server: String = VoiceBoxClient.defaultServer, profile: String? = nil, speed: Double = 1, preview: Bool = false, geminiVoice: String = GeminiSpeechClient.defaultVoice, geminiModel: String = GeminiSpeechClient.defaultModel, geminiStyle: String = "Natural", geminiAuth: String = "apiKey", economy: Bool = true) {
+        let provider = ["gemini", "voicebox", "fish"].contains(provider) ? provider : "fish"
         let spoken=VoiceBoxClient.speechText(text)
         guard !spoken.isEmpty else{return}
         let speechKey=[provider,identifier ?? "",server,profile ?? "",geminiVoice,geminiModel,geminiStyle,String(speed),spoken].joined(separator:"|")
@@ -279,19 +278,13 @@ final class VoiceService: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
             }
             return
         }
-        let utterance = AVSpeechUtterance(string: VoiceBoxClient.speechText(text)); utterance.rate = min(0.6, max(0.35, rate))
-        utterance.preUtteranceDelay=0.08;utterance.postUtteranceDelay=0.16
-        let language = AssistantLanguage.spokenLanguage(text)
-        let chosen = identifier.flatMap { AVSpeechSynthesisVoice(identifier: $0) }
-        utterance.voice = chosen.flatMap { $0.language.hasPrefix(language) ? $0 : nil } ?? AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix(language) }.sorted { $0.quality.rawValue > $1.quality.rawValue }.first
-        currentUtterance = utterance; speaking = true; synthesizer.speak(utterance)
     }
     func stopSpeaking() {
         playbackID = UUID(); replyContinuation?.finish(); replyContinuation = nil; replyChunker = nil
         speechTask?.cancel(); speechTask = nil
         streamPlayer?.stop(); streamPlayer = nil
-        naturalPlayer?.delegate=nil;naturalPlayer?.stop(); naturalPlayer = nil; currentUtterance = nil;currentSpokenText=nil
-        synthesizer.stopSpeaking(at: .immediate); preparingSpeech = false; speaking = false
+        naturalPlayer?.delegate=nil;naturalPlayer?.stop(); naturalPlayer = nil;currentSpokenText=nil
+        preparingSpeech = false; speaking = false
     }
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
@@ -299,13 +292,5 @@ final class VoiceService: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
             self.naturalPlayer = nil; self.speaking = false
             if !flag { self.speechError = "Voice playback was interrupted. Check your audio output." }
         }
-    }
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        let identity = ObjectIdentifier(utterance)
-        Task { @MainActor in guard let current = self.currentUtterance, ObjectIdentifier(current) == identity else { return }; self.currentUtterance = nil; self.speaking = false }
-    }
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        let identity = ObjectIdentifier(utterance)
-        Task { @MainActor in guard let current = self.currentUtterance, ObjectIdentifier(current) == identity else { return }; self.currentUtterance = nil; self.speaking = false }
     }
 }

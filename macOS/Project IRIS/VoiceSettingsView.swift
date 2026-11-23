@@ -8,7 +8,7 @@ struct VoiceSettingsView: View {
     @State private var profiles: [VoiceBoxProfile] = []
     @State private var loading = false
     @State private var connectionError: String?
-    private var provider: String { iris.preferences.voiceProvider ?? "gemini" }
+    private var provider: String { iris.preferences.speechProvider }
     private var natural: Bool { provider == "voicebox" }
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -17,10 +17,9 @@ struct VoiceSettingsView: View {
                 VStack(alignment: .leading, spacing: 5) { Text("A voice that feels right").font(.title2.weight(.semibold)); Text("Choose how Iris sounds, independently of your chat model.").foregroundStyle(IrisDesign.secondary) }
             }
             HStack(spacing: 12) {
-                Button { changeProvider("fish") } label: { Label("Simonne", systemImage: provider == "fish" ? "checkmark.circle.fill" : "circle") }.buttonStyle(IrisActionStyle(primary: provider == "fish"))
+                Button { changeProvider("fish") } label: { Label("Default", systemImage: provider == "fish" ? "checkmark.circle.fill" : "circle") }.buttonStyle(IrisActionStyle(primary: provider == "fish"))
                 Button { changeProvider("gemini") } label: { Label("Gemini", systemImage: provider == "gemini" ? "checkmark.circle.fill" : "circle") }.buttonStyle(IrisActionStyle(primary: provider == "gemini"))
                 Button { changeProvider("voicebox") } label: { Label("VoiceBox · Local AI", systemImage: natural ? "checkmark.circle.fill" : "circle") }.buttonStyle(IrisActionStyle(primary: natural))
-                Button { changeProvider("system") } label: { Label("macOS voices", systemImage: provider == "system" ? "checkmark.circle.fill" : "circle") }.buttonStyle(IrisActionStyle(primary: provider == "system"))
             }
             if provider == "fish" {
                 VStack(alignment: .leading, spacing: 12) {
@@ -67,9 +66,6 @@ struct VoiceSettingsView: View {
                 }
                 HStack { Text("Playback speed"); Slider(value: Binding(get: { iris.preferences.voiceBoxSpeed ?? 1 }, set: { speed in iris.setPreference { $0.voiceBoxSpeed = speed } }), in: 0.75...1.4); Text(String(format: "%.2f×", iris.preferences.voiceBoxSpeed ?? 1)).monospacedDigit().frame(width: 52) }
                 Text("AI-generated voice · No voice API key or per-character fee. Reply text goes to VoiceBox on this Mac. Spoken replies include up to 2,000 characters; code blocks are skipped. The first preview may take longer while VoiceBox loads its model.").font(.caption).foregroundStyle(IrisDesign.secondary).fixedSize(horizontal: false, vertical: true)
-            } else {
-                IrisPicker("System voice", selection: Binding(get: { iris.preferences.voiceID ?? "" }, set: { id in iris.voice.stopSpeaking(); iris.setPreference { $0.voiceID = id } }), display: AVSpeechSynthesisVoice(identifier: iris.preferences.voiceID ?? "")?.name ?? "Best available system voice", options: [.init(value: "", title: "Best available system voice")] + AVSpeechSynthesisVoice.speechVoices().sorted { $0.name < $1.name }.map { .init(value: $0.identifier, title: $0.name, detail: $0.language, symbol: "waveform") })
-                HStack { Text("Speech speed"); Slider(value: Binding(get: { Double(iris.preferences.speechRate ?? 0.49) }, set: { speed in iris.setPreference { $0.speechRate = Float(speed) } }), in: 0.35...0.6) }
             }
             HStack(spacing: 14) {
                 Button("Preview voice", systemImage: "play.fill") { preview(iris.preferences.voiceBoxProfile) }.buttonStyle(IrisActionStyle(primary: true)).disabled(iris.voice.preparingSpeech || (natural && iris.preferences.voiceBoxProfile == nil))

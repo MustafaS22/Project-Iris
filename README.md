@@ -42,11 +42,11 @@ Open the desktop chat for a longer conversation, ask a quick question from the M
 
 On Mac, open the DMG, drag Iris to Applications, and launch it from there. Onboarding walks through choosing your AI and voice providers, granting the permissions you want to use, and trying the notch, floating mode, and drafting.
 
-### Simonne voice
+### Default voice
 
-Iris 2.0.33 adds **Simonne** in **Settings → Voice & speech**. Select Simonne and press **Preview voice** to try the shared Fish Audio voice. Users can speak with her without entering an API key. Replies can stream as Iris writes, and **Stop** cancels playback.
+Iris 2.0.34 uses Fish Audio as its **Default** voice provider in **Settings → Voice & speech**. Select Default and press **Preview voice** to try Simonne, the shared Iris voice. Users can speak with her without entering an API key. Replies can stream as Iris writes, and **Stop** cancels playback.
 
-Simonne requires an internet connection. Reply text passes through AriZe’s voice service to Fish Audio. The service uses the free speech model, with shared request limits and availability governed by Fish Audio. The API key is held in server secret settings. The app source contains the client integration and public service address.
+Simonne requires an internet connection. Reply text passes through AriZe’s voice service to Fish Audio. The service uses the free speech model, with shared request limits and availability governed by Fish Audio. The API key is held in server secret settings. The app source contains the client integration and public service address. Gemini and VoiceBox remain selectable. Older macOS-voice selections use Default.
 
 ## Build and test
 

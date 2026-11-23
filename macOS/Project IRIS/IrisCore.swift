@@ -39,6 +39,10 @@ struct Preferences: Codable, Equatable {
     var geminiSpeechSpeed: Double?
     var speechRecognitionProvider: String?
     var voiceProvider: String?
+    var speechProvider: String {
+        guard let provider = voiceProvider, ["gemini", "voicebox"].contains(provider) else { return "fish" }
+        return provider
+    }
     var voiceBoxServer: String?
     var voiceBoxProfile: String?
     var voiceBoxSpeed: Double?
