@@ -106,7 +106,7 @@ struct ComputerObservation {
             let focused = attribute(application,kAXFocusedUIElementAttribute)
             if let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() { roots.append((focused as! AXUIElement,0)) }
             var stack = Array(roots.reversed())
-            while visited < 350, Date().timeIntervalSince(started) < 2, !stack.isEmpty {
+            while visited < (query == nil ? 350 : 650), Date().timeIntervalSince(started) < 2, !stack.isEmpty {
                 let (e,depth) = stack.removeFirst()
                 try Task.checkCancellation(); visited += 1
                 if attribute(e,"AXHidden") as? Bool == true { continue }
@@ -124,7 +124,7 @@ struct ComputerObservation {
                     let focus = focused.map { CFEqual($0,e) } == true ? " focused=true" : ""
                     rows.append("\(id) \(role) \(String(title.prefix(180))) \(bounds)\(focus)")
                 }
-                if depth < 14, let children = attribute(e,kAXChildrenAttribute) as? [AXUIElement] { stack.append(contentsOf:children.prefix(80).map{($0,depth+1)}) }
+                if depth < 19, let children = attribute(e,kAXChildrenAttribute) as? [AXUIElement] { stack.append(contentsOf:children.prefix(80).map{($0,depth+1)}) }
             }
             if !stack.isEmpty { rows.append("[Inspection truncated at its depth, node or time budget. Refine the query or use a screenshot; do not assume omitted controls are absent.]") }
             return .init(rows:rows.prefix(100).joined(separator:"\n"),hasSecureFields:hasSecureFields,elements:targets)
@@ -136,11 +136,11 @@ struct ComputerObservation {
         return heading + capture.rows
     }
     func observe(includeImage: Bool = false) async throws -> ComputerObservation {
-        if includeImage {
+        if includeImage && !policy.deniedTools.contains("get_screen") {
             let result = try await capture(windowID:nil)
             // Capture's secure-field scan refreshes AX IDs. Return the matching current tree.
             let text = try await tree()
-            return .init(text:text + "\n" + result,image:lastImage)
+            return .init(text:result + "\n" + text,image:lastImage)
         }
         return .init(text:try await tree(),image:nil)
     }
@@ -186,7 +186,11 @@ struct ComputerObservation {
             filter = SCContentFilter(display:display,excludingApplications:excluded,exceptingWindows:[])
             capturedFrame = CGDisplayBounds(displayID)
         } else {
-            guard let window = windows.first(where: { windowID == nil ? $0.owningApplication?.processID == current.processIdentifier : $0.windowID == windowID }), let owner = window.owningApplication else { throw failure("That visible window is unavailable or excluded.") }
+            let appWindows = windows.filter { $0.owningApplication?.processID == current.processIdentifier }
+            let focusedBounds = AXIsProcessTrusted() ? attribute(root(current),kAXFocusedWindowAttribute).flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? rect($0 as! AXUIElement) : nil } : nil
+            let selected = windowID != nil ? appWindows.first { $0.windowID == windowID }
+                : (focusedBounds.flatMap { bounds in appWindows.first { $0.frame == bounds } } ?? appWindows.first)
+            guard let window = selected, let owner = window.owningApplication else { throw failure("That visible window is unavailable or excluded.") }
             guard owner.processID == current.processIdentifier else { throw failure("Focus the requested window before capturing it; background windows are not silently shared.") }
             filter = SCContentFilter(desktopIndependentWindow:window); capturedFrame = window.frame; capturedWindowID = window.windowID
         }
@@ -283,6 +287,27 @@ struct ComputerObservation {
             event.postToPid(pid)
         } else { event.post(tap:.cghidEventTap) }
     }
+    /// Match only explicit app targets, using installed application names.
+    func explicitApplication(in objective: String) -> String? {
+        let phrase = objective.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased().trimmingCharacters(in: .punctuationCharacters)
+        let running = NSWorkspace.shared.runningApplications.compactMap(\.bundleURL)
+        let installed = ["/Applications", "/System/Applications", "/System/Applications/Utilities", NSHomeDirectory() + "/Applications"].flatMap {
+            (try? FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath:$0), includingPropertiesForKeys:nil, options:.skipsHiddenFiles)) ?? []
+        }
+        let matches = (running + installed).filter { $0.pathExtension == "app" }.compactMap { url -> (String, String)? in
+            guard let id = Bundle(url:url)?.bundleIdentifier else { return nil }
+            let name = url.deletingPathExtension().lastPathComponent.lowercased()
+            let opens = ["open ", "launch "].contains { prefix in
+                phrase == prefix + name || [" ", ",", "."].contains { phrase.hasPrefix(prefix + name + $0) }
+            }
+            guard opens || phrase.hasSuffix(" in " + name) else { return nil }
+            return (name, id)
+        }.sorted { $0.0.count > $1.0.count }
+        guard let first = matches.first, Set(matches.filter { $0.0.count == first.0.count }.map(\.1)).count == 1 else { return nil }
+        return first.1
+    }
+
     func execute(_ name: String, _ args: [String:Value]) async throws -> ComputerObservation {
         try Task.checkCancellation()
         guard let tool = Self.tools.first(where:{$0.name == name}), Set(args.keys).isSubset(of:Set(tool.properties.keys)), tool.required.allSatisfy({args[$0] != nil}) else { throw failure("Unknown tool, missing argument, or unsupported argument.") }
@@ -335,14 +360,37 @@ struct ComputerObservation {
             return .init(text:output,image:lastImage)
         case "launch_application", "focus_window":
             guard let bundle = args["bundle_id"]?.stringValue, !bundle.isEmpty else { throw failure("Choose an application bundle identifier.") }
-            if name == "focus_window" {
-                guard let running = NSRunningApplication.runningApplications(withBundleIdentifier:bundle).first else { throw failure("The application is not running.") }
-                running.activate(options:[.activateIgnoringOtherApps])
+            try validateInput?()
+            let target: NSRunningApplication
+            if let running = NSRunningApplication.runningApplications(withBundleIdentifier:bundle).first(where: { !$0.isTerminated }) {
+                target = running
             } else {
-                guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier:bundle) ?? NSRunningApplication.runningApplications(withBundleIdentifier:bundle).first?.bundleURL else { throw failure("No installed app matches that bundle identifier.") }
-                _ = try await NSWorkspace.shared.openApplication(at:url,configuration:.init())
+                guard name == "launch_application", let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier:bundle) else {
+                    throw failure("The requested application is not available.")
+                }
+                target = try await NSWorkspace.shared.openApplication(at:url,configuration:.init())
             }
-            output = "Requested app activation. Inspect its interface to verify."
+            try Task.checkCancellation()
+            try validateInput?()
+            if target.isHidden { target.unhide() }
+            target.activate()
+            for _ in 0..<40 {
+                try Task.checkCancellation()
+                try validateInput?()
+                if NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier, target.isFinishedLaunching {
+                    if AXIsProcessTrusted(), attribute(root(target),kAXFocusedWindowAttribute) == nil,
+                       let windows = attribute(root(target),kAXWindowsAttribute) as? [AXUIElement],
+                       let minimized = windows.first(where: { attribute($0,kAXMinimizedAttribute) as? Bool == true }) {
+                        AXUIElementSetAttributeValue(minimized,kAXMinimizedAttribute as CFString,kCFBooleanFalse)
+                        AXUIElementPerformAction(minimized,kAXRaiseAction as CFString)
+                    }
+                    onApplication?(target.localizedName ?? bundle)
+                    return .init(text:"Verified foreground application: " + (target.localizedName ?? bundle),image:nil)
+                }
+                try await Task.sleep(for:.milliseconds(200))
+            }
+            throw failure("The application opened but did not become active within eight seconds.")
+
         default:
             try accessibility(); let current = try app(); let application = root(current)
             switch name {

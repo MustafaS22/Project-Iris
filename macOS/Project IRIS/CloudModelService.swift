@@ -14,7 +14,7 @@ enum CloudModelService {
         }
         return (object["models"] as? [[String: Any]] ?? []).filter { ($0["supportedGenerationMethods"] as? [String] ?? []).contains("generateContent") }.compactMap { $0["name"] as? String }
     }
-    static func answer(source: KnowledgeSource, model: String, messages: [ChatMessage], context: String, skill: String = "", personality: IrisPersonality = .companion, images: [ModelImage] = [], liveData: String = "", onPartial: (@MainActor (String) -> Void)? = nil, draftInstruction: String? = nil, outputLimit: Int? = nil) async throws -> String {
+    static func answer(source: KnowledgeSource, model: String, messages: [ChatMessage], context: String, skill: String = "", personality: IrisPersonality = .companion, images: [ModelImage] = [], liveData: String = "", onPartial: (@MainActor (String) -> Void)? = nil, draftInstruction: String? = nil, outputLimit: Int? = nil, session: URLSession = .shared) async throws -> String {
         let token = try await AccountService.bearer(for: source)
         let compact = ResponsePromptPolicy.usesCompactPrompt(prompt: messages.last(where: { $0.role == "user" })?.text ?? "", skill: skill, hasImages: !images.isEmpty, context: context)
         var instruction: String
@@ -34,7 +34,7 @@ enum CloudModelService {
             if let outputLimit { body["max_output_tokens"] = outputLimit }
             else if draftInstruction != nil { body["max_output_tokens"] = 1400 }
             let req = try request(url: URL(string: "https://api.openai.com/v1/responses")!, token: token, source: source, body: body)
-            let (bytes, response) = try await URLSession.shared.bytes(for: req)
+            let (bytes, response) = try await session.bytes(for: req)
             try check(response)
             onPartial?("")
             var stream = ProviderStream(kind: .openAI)
@@ -53,7 +53,7 @@ enum CloudModelService {
         let contents = AttachmentPayload.messages(messages, images: images, provider: "gemini")
         let body: [String: Any] = ["systemInstruction": ["parts": [["text": instruction]]], "contents": contents, "generationConfig": ["maxOutputTokens": outputLimit ?? (draftInstruction != nil ? 1400 : skill.isEmpty ? 1600 : 6000)]]
         let req = try request(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(identifier):streamGenerateContent?alt=sse")!, token: token, source: source, body: body)
-        let (bytes, response) = try await URLSession.shared.bytes(for: req); try check(response)
+        let (bytes, response) = try await session.bytes(for: req); try check(response)
         onPartial?("")
         var stream = ProviderStream(kind: .gemini)
         for try await line in bytes.lines {

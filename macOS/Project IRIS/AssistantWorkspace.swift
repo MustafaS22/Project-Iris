@@ -93,7 +93,7 @@ struct ActionReview: View {
                 Text(action.type == "writeFile" ? "Review file changes" : "Review action").font(.title2.bold())
                 Text(action.path ?? action.target ?? "Folder contents").textSelection(.enabled)
                 if action.type == "computerTask" {
-                    Text("Starting shares the relevant visible app’s interface text with your selected AI during this task. Images are off unless you enable task screenshots in Computer settings. Excluded apps stay blocked. Each consequential input or external tool is reviewed separately. Escape stops; manual interaction pauses.").font(.callout).foregroundStyle(IrisDesign.secondary)
+                    Text("Starting shares the relevant visible app’s interface text with your selected AI during this task. Images are off unless you enable task screenshots in Computer settings. Excluded apps stay blocked. Each consequential input or external tool is reviewed separately. Escape stops the task. Manual input refreshes the observation.").font(.callout).foregroundStyle(IrisDesign.secondary)
                 }
                 if let browser = action.browser { Label(browser, systemImage: "globe") }
                 if let folder = iris.actions.folders.first(where: { $0.id == action.folder || $0.name == action.folder }) { Label(folder.name, systemImage: "folder.fill") }

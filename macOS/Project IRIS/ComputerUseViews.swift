@@ -27,6 +27,14 @@ struct ComputerActivityView: View {
                     Button("Enable screen awareness") { session.policy.shareScreen = true }.font(.caption)
                         .help("Share task window images with your selected AI; no idle recording")
                 }
+                if let permission = session.requiredPermission {
+                    Text("Iris needs \(permission.rawValue) for the requested action. It will check access and continue when macOS grants it.").font(.caption)
+                    Button("Open \(permission.rawValue) settings") { permission.openRequest() }
+                        .buttonStyle(IrisActionStyle())
+                    if permission == .screenRecording {
+                        Text("If macOS requires a restart, restart Iris and retry this task.").font(.caption).foregroundStyle(IrisDesign.secondary)
+                    }
+                }
                 if session.awaitingApproval {
                     Divider()
                     Text("Review this action").font(.subheadline.weight(.semibold))
