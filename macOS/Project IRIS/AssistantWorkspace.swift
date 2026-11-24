@@ -78,6 +78,7 @@ struct ActionReview: View {
     @ObservedObject var iris: IrisOrchestrator
     @State private var selected: AssistantAction?
     var body: some View {
+        ComputerActivityView(session: iris.computer, accent: iris.accent)
         ForEach(iris.actions.pending) { action in
             VStack(alignment: .leading, spacing: 12) {
                 Label("Review computer action", systemImage: "hand.raised").font(.headline)
@@ -91,6 +92,9 @@ struct ActionReview: View {
             VStack(alignment: .leading, spacing: 18) {
                 Text(action.type == "writeFile" ? "Review file changes" : "Review action").font(.title2.bold())
                 Text(action.path ?? action.target ?? "Folder contents").textSelection(.enabled)
+                if action.type == "computerTask" {
+                    Text("Starting shares the relevant visible app’s interface text with your selected AI during this task. Images are off unless you enable task screenshots in Computer settings. Excluded apps stay blocked. Each consequential input or external tool is reviewed separately. Escape stops; manual interaction pauses.").font(.callout).foregroundStyle(IrisDesign.secondary)
+                }
                 if let browser = action.browser { Label(browser, systemImage: "globe") }
                 if let folder = iris.actions.folders.first(where: { $0.id == action.folder || $0.name == action.folder }) { Label(folder.name, systemImage: "folder.fill") }
                 if let command = try? iris.actions.commandPreview(action) {
@@ -117,7 +121,7 @@ struct AssistantSettingsView: View {
     private let groups: [(String, [String])] = [
         ("Personal", ["Appearance", "Personality", "Voice", "Language", "Memory", "Accessibility"]),
         ("Assistant", ["AI", "Live data", "Creation", "Connections"]),
-        ("Your Mac", ["Computer", "Shortcuts", "Privacy"]),
+        ("Your Mac", ["Computer", "MCP", "Shortcuts", "Privacy"]),
         ("Support", ["Updates", "App testing"])
     ]
     private func info(_ key: String) -> (title: String, symbol: String, detail: String) {
@@ -133,6 +137,7 @@ struct AssistantSettingsView: View {
         case "Live data": return ("Live information", "sun.max.fill", "Weather, location, date and time")
         case "Creation": return ("Image generation", "photo.fill", "Image provider and generation API key")
         case "Connections": return ("Connections", "point.3.connected.trianglepath.dotted", "Connect apps and manage knowledge sources")
+        case "MCP": return ("MCP connections", "puzzlepiece.extension.fill", "Connect trusted tools, APIs and browser automation")
         case "Computer": return ("Computer & files", "desktopcomputer", "Floating Iris, browser, folders and computer actions")
         case "Shortcuts": return ("Shortcuts", "command", "Keyboard shortcuts and Double Tap")
         case "Privacy": return ("Privacy & access", "hand.raised.fill", "Screen Recording, microphone and macOS permissions")
@@ -200,6 +205,7 @@ struct AssistantSettingsView: View {
                 case "Live data": LiveDataSettings(iris: iris)
                 case "AI": SourceSettings(iris: iris)
                 case "Creation": ImageProviderSettings()
+                case "MCP": MCPSettingsView(session: iris.computer)
                 case "Computer": computer
                 case "Shortcuts": ShortcutSettingsView(shortcuts: iris.shortcuts)
                 case "Connections": KnowledgeConnectionsView(iris: iris, showsHeading: false)

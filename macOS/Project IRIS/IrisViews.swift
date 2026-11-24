@@ -217,6 +217,7 @@ struct NotchSurface: View {
                     .onChange(of: iris.messages.last?.text) { _, _ in if let id = iris.messages.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
                 }
             }
+            ComputerActivityView(session: iris.computer, accent: iris.accent)
             ChatMentionComposer(iris: iris, compact: true)
             if !iris.actions.pending.isEmpty { Button("Review computer action") { iris.showWorkspace(.today) }.buttonStyle(IrisActionStyle(primary: true)) }
             HStack {

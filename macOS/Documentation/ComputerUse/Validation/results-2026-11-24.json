@@ -1,0 +1,19 @@
+{
+  "app-switching": "PASS: switched between Finder and the isolated native fixture and verified foreground identities",
+  "dialog-recovery": "PASS: detected a real unexpected NSAlert, found its semantic Cancel control, dismissed it and re-observed the app",
+  "display-metadata": "PASS: real display IDs, points and scaling",
+  "file-scope": "PASS: real create/read/move; traversal rejected",
+  "frame-validation": "PASS: stale/unknown coordinates blocked",
+  "manual-interruption": "PASS: unexpected input paused the task; isolated file-only test explicitly resumed",
+  "mcp-reconnect": "PASS: unregister on disconnect, rediscover after restart; no action replay",
+  "mcp-streamable-http": "PASS: real localhost JSON-RPC initialization, tool discovery/execution and resource discovery/read",
+  "native-input": "PASS: focused real AppKit field, inserted Unicode, pressed AX button, observed resulting label",
+  "native-mcp-stdio": "PASS: spawned actual Iris MCP process, initialized, discovered tools, called real display metadata",
+  "observe-mode": "PASS: blocked pointer action before execution",
+  "overall": "Completed bounded local validation. No user documents, credentials, privacy settings or AI quota changed.",
+  "pause-stop": "PASS: pause/resume state and stop cancel active local model task without executing an action",
+  "planner-loop": "PASS: local scripted model used native app inspection, HTTP MCP file read, scoped write/read, approval, observation and verified completion end to end (no cloud quota)",
+  "playwright-dom": "PASS: launched real headless Chrome through Microsoft's MCP server, navigated localhost page, retrieved semantic DOM snapshot",
+  "screen-capture": "PASS: actual fixture window JPEG with point/pixel transform; integer point coordinates accepted",
+  "stale-target": "PASS: old tree reference rejected"
+}

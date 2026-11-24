@@ -30,6 +30,7 @@ Open the desktop chat for a longer conversation, ask a quick question from the M
 | **Double Tap drafting** | Start a reply or polish text in the field you’re already using, then review it before sending. |
 | **Knowledge and memory** | Add files, notes, or connections. Type `@` to bring a specific source into chat. |
 | **Create and revisit** | Ask Iris to make a website, document, or image. Reopen saved work from the Library. |
+| **Computer use & MCP** | Type `@computer` for a supervised multi-step task. Connect trusted tools in Settings → MCP connections; pause or stop from chat/the notch. [Setup and privacy](macOS/Documentation/ComputerUse/Setup.md). |
 | **Background agents** | Give a longer job to a specialist and follow its progress while you work. |
 
 ## Get Iris
@@ -44,13 +45,13 @@ On Mac, open the DMG, drag Iris to Applications, and launch it from there. Onboa
 
 ### Default voice
 
-Iris 2.0.34 uses Fish Audio as its **Default** voice provider in **Settings → Voice & speech**. Select Default and press **Preview voice** to try Simonne, the shared Iris voice. Users can speak with her without entering an API key. Replies can stream as Iris writes, and **Stop** cancels playback.
+Iris uses Fish Audio as its **Default** voice provider in **Settings → Voice & speech**. Select Default and press **Preview voice** to try Simonne, the shared Iris voice. Users can speak with her without entering an API key. Replies can stream as Iris writes, and **Stop** cancels playback.
 
 Simonne requires an internet connection. Reply text passes through AriZe’s voice service to Fish Audio. The service uses the free speech model, with shared request limits and availability governed by Fish Audio. The API key is held in server secret settings. The app source contains the client integration and public service address. Gemini and VoiceBox remain selectable. Older macOS-voice selections use Default.
 
 ## Build and test
 
-Open the [Mac Xcode project](macOS/Project%20IRIS.xcodeproj) in Xcode 27.2 or later and choose your Apple signing team. Xcode resolves Sparkle through Swift Package Manager.
+Open the [Mac Xcode project](macOS/Project%20IRIS.xcodeproj) in Xcode 27.2 or later and choose your Apple signing team. Xcode resolves Sparkle and the official MCP Swift SDK through Swift Package Manager.
 
 ```sh
 swift test --package-path macOS/IrisCoreTests

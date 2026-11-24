@@ -29,11 +29,12 @@ struct ChatMentionRequest {
     var creation: ChatCreationKind?
     var skill: StudioSkill?
     var agent = false
+    var computer = false
     var tokens: [String] = []
 }
 
 enum ChatMentions {
-    static let tools: [ChatMentionOption] = [.init(token: "agent", title: "Agent", detail: "Delegate a larger task in the background", symbol: "person.2.fill")] + ChatCreationKind.allCases.map { .init(token: $0.rawValue, title: $0.title, detail: $0 == .image ? "Generate a PNG · API billing applies" : $0 == .website ? "Build an openable HTML website" : "Create an openable PDF", symbol: $0.symbol) } + StudioSkill.allCases.filter { $0 != .website }.map { .init(token: $0.rawValue, title: $0.title, detail: $0.subtitle, symbol: $0.symbol) }
+    static let tools: [ChatMentionOption] = [.init(token: "computer", title: "Computer", detail: "Work across apps with observation and review", symbol: "cursorarrow.motionlines"), .init(token: "agent", title: "Agent", detail: "Delegate a larger task in the background", symbol: "person.2.fill")] + ChatCreationKind.allCases.map { .init(token: $0.rawValue, title: $0.title, detail: $0 == .image ? "Generate a PNG · API billing applies" : $0 == .website ? "Build an openable HTML website" : "Create an openable PDF", symbol: $0.symbol) } + StudioSkill.allCases.filter { $0 != .website }.map { .init(token: $0.rawValue, title: $0.title, detail: $0.subtitle, symbol: $0.symbol) }
     static func token(for source: KnowledgeConnector) -> String {
         switch source { case .appleNotes: "notes"; case .appleMail: "mail"; case .appleMessages: "messages"; case .appleCalendar: "calendar"; case .appleReminders: "reminders"; default: source.rawValue.lowercased() }
     }
@@ -45,7 +46,8 @@ enum ChatMentions {
         var request = ChatMentionRequest(text: input)
         var removing: [NSRange] = []
         for (range, token) in mentionMatches(in: input) {
-            if token == "agent" { request.agent = true }
+            if token == "computer" { request.computer = true }
+            else if token == "agent" { request.agent = true }
             else if let kind = ChatCreationKind(rawValue: token == "pdf" ? "document" : token) {
                 guard request.creation == nil || request.creation == kind, request.skill == nil else { throw MentionFailure.conflictingTools }
                 request.creation = kind
@@ -63,7 +65,7 @@ enum ChatMentions {
     }
     static func highlightedRanges(in input: String) -> [NSRange] {
         mentionMatches(in: input).compactMap { range, token in
-            token == "agent" || ChatCreationKind(rawValue: token) != nil || connector(for: token) != nil || StudioSkill(rawValue: token) != nil ? range : nil
+            token == "computer" || token == "agent" || ChatCreationKind(rawValue: token) != nil || connector(for: token) != nil || StudioSkill(rawValue: token) != nil ? range : nil
         }
     }
     private static func mentionMatches(in input: String) -> [(NSRange, String)] {

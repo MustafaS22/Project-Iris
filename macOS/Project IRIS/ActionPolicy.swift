@@ -9,7 +9,7 @@ struct AssistantAction: Codable, Identifiable {
     var browser: String?
     var displayName: String {
         switch type {
-        case "openApplication": "Open an app"; case "openURL": "Open a web page"; case "searchWeb": "Search the web"
+        case "computerTask": "Work on your computer"; case "openApplication": "Open an app"; case "openURL": "Open a web page"; case "searchWeb": "Search the web"
         case "listFiles": "Browse files"; case "readFile": "Read a file locally"; case "writeFile": "Save a file"
         case "createFolder": "Create a folder"; case "revealFile": "Show in Finder"
         case "createDocument": "Create a document"; case "generateImage": "Generate an image"; case "attachFile": "Add a file to chat"; case "findFiles": "Find files"
@@ -20,11 +20,11 @@ struct AssistantAction: Codable, Identifiable {
     var id: String { [type, folder ?? "", path ?? "", target ?? "", browser ?? ""].map { "\($0.utf8.count):\($0)" }.joined(separator: "|") }
 }
 enum ActionPolicy {
-    static let types: Set<String> = ["openApplication", "openURL", "searchWeb", "listFiles", "readFile", "writeFile", "createFolder", "revealFile", "playSpotifyPlaylist", "startLMStudio", "runProject", "attachFile", "findFiles", "createDocument", "generateImage", "drawOnScreen", "guideControl", "focusControl"]
+    static let types: Set<String> = ["computerTask","openApplication", "openURL", "searchWeb", "listFiles", "readFile", "writeFile", "createFolder", "revealFile", "playSpotifyPlaylist", "startLMStudio", "runProject", "attachFile", "findFiles", "createDocument", "generateImage", "drawOnScreen", "guideControl", "focusControl"]
     static func mayRunAutomatically(_ action: AssistantAction, enabled: Bool) -> Bool {
         // Drawing only updates our own click-through overlay; computer actions retain their saved policy.
         // Separately billed media generation always keeps its explicit charge review.
-        ["drawOnScreen", "guideControl", "focusControl"].contains(action.type) || enabled && types.contains(action.type) && action.type != "generateImage"
+        ["drawOnScreen", "guideControl", "focusControl"].contains(action.type) || enabled && types.contains(action.type) && action.type != "generateImage" && action.type != "computerTask"
     }
     static func parse(_ reply: String) -> [AssistantAction]? {
         guard let start = reply.range(of: "```iris-actions"), let end = reply.range(of: "```", range: start.upperBound..<reply.endIndex) else { return nil }

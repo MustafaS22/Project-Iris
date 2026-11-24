@@ -17,6 +17,13 @@
       "version": {
         "version": "2.10.1"
       }
+    },
+    {
+      "kind": "remote",
+      "repository": "https://github.com/modelcontextprotocol/swift-sdk.git",
+      "version": {
+        "revision": "234e412874267c16309a4fc76a6e3629c9fea13f"
+      }
     }
   ],
   "files": [
@@ -58,6 +65,13 @@
           "build-phase": {
             "build-phase": "frameworks"
           }
+        },
+        {
+          "package": "swift-sdk",
+          "product-name": "MCP",
+          "build-phase": {
+            "build-phase": "frameworks"
+          }
         }
       ],
       "build-settings": {
@@ -67,7 +81,7 @@
         "CODE_SIGN_ENTITLEMENTS": "Configuration/Iris.entitlements",
         "CODE_SIGN_STYLE": "Automatic",
         "COMBINE_HIDPI_IMAGES": "YES",
-        "CURRENT_PROJECT_VERSION": "234",
+        "CURRENT_PROJECT_VERSION": "235",
         "DEVELOPMENT_TEAM": "5JDH4L7FK5",
         "ENABLE_APP_SANDBOX": "NO",
         "ENABLE_AUDIO_INPUT": "YES",
@@ -92,7 +106,7 @@
           "$(inherited)",
           "@executable_path/../Frameworks"
         ],
-        "MARKETING_VERSION": "2.0.34",
+        "MARKETING_VERSION": "2.1.0",
         "PRODUCT_BUNDLE_IDENTIFIER": "com.projectiris.Project-IRIS",
         "PRODUCT_NAME": "$(TARGET_NAME)",
         "REGISTER_APP_GROUPS": "YES",

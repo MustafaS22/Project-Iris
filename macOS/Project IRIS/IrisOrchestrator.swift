@@ -68,6 +68,7 @@ final class IrisOrchestrator: ObservableObject {
     let updates = IrisUpdates()
     let voice = VoiceService()
     let actions = AssistantActions()
+    let computer = ComputerUseSession()
     private var spokenRequest = false
     let accounts: AccountService
     let knowledge: KnowledgeStore
@@ -137,6 +138,7 @@ final class IrisOrchestrator: ObservableObject {
         knowledge.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
         connections.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
         accounts.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
+        computer.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
         actions.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
         voice.$speechError.compactMap { $0 }.sink { [weak self] in self?.error = $0 }.store(in: &subscriptions)
         voice.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
@@ -163,6 +165,7 @@ final class IrisOrchestrator: ObservableObject {
     var preferences: Preferences { data.preferences }
     var state: IrisState {
         if error != nil { return .error }
+        if computer.running { return computer.awaitingApproval ? .permission : .thinking }
         if welcome.active, welcome.celebrating { return .celebration }
         if voice.listening { return .listening }; if voice.speaking { return .answering }
         if voice.requesting { return .permission }; if contextBusy { return .vision }
@@ -284,6 +287,11 @@ final class IrisOrchestrator: ObservableObject {
         let images = shared.compactMap(\.image)
         guard images.count <= AttachmentReader.maximumCount else { error = "Use up to six images across chat attachments and Studio references."; return }
         voice.stop(); voice.stopSpeaking(); error = nil
+        if mention.computer {
+            guard !computer.running, !agents.computerBusy else { error = "A computer task is already active. Stop it before starting another."; return }
+            messages.append(.init(role: "user", text: typed)); draft = ""
+            queueActions([.init(type: "computerTask", target: text)]); return
+        }
         if shared.isEmpty, mention.creation == nil, mention.connectors.isEmpty, let fact = MemoryPolicy.explicitFact(text) {
             remember(fact)
             guard error == nil else { return }
@@ -292,7 +300,7 @@ final class IrisOrchestrator: ObservableObject {
             if floatingActive { speakFloatingReply(confirmation) }
             return
         }
-        if mention.creation != .image, AgentPolicy.shouldDeploy(text, explicit: mention.agent, contextual: !shared.isEmpty || !mention.connectors.isEmpty),
+        if !computer.running, mention.creation != .image, AgentPolicy.shouldDeploy(text, explicit: mention.agent, contextual: !shared.isEmpty || !mention.connectors.isEmpty),
            mention.agent || !floatingActive || !ScreenQuestionPolicy.wantsSnapshot(text) {
             do { try deployAgent(mention: mention, task: mention.text, typed: typed, shared: shared, origin: conversationID) }
             catch { self.error = error.localizedDescription }
@@ -680,11 +688,22 @@ final class IrisOrchestrator: ObservableObject {
         runAutomaticActions()
     }
     func runAutomaticActions() {
-        guard !busy, !agents.computerBusy, let first = actions.pending.first,
+        guard !busy, !agents.computerBusy, !computer.running, let first = actions.pending.first,
               ActionPolicy.mayRunAutomatically(first, enabled: preferences.alwaysAllowComputerActions ?? false) else { return }
         perform(first, automatic: true)
     }
     func perform(_ action: AssistantAction, automatic: Bool = false) {
+        if action.type == "computerTask" {
+            guard !busy, !agents.computerBusy, !computer.running else { return }
+            actions.pending.removeAll { $0.id == action.id }
+            computer.start(action.target ?? "", preferences: preferences, files: actions) { [weak self] outcome in
+                guard let self else { return }
+                self.messages.append(.init(role: "assistant", text: outcome))
+                if self.floatingActive { self.speakFloatingReply(outcome) }
+            }
+            return
+        }
+        guard !computer.running else { notice = "Pause or stop the active computer task first."; return }
         guard !busy, !agents.computerBusy else { notice = "An agent is using the computer. Try this action when it finishes."; return }
         let batch = automatic ? actions.pending : [action]
         busy = true; requestStarted = Date(); requestPhase = action.displayName; liveReply = ""
@@ -739,6 +758,7 @@ final class IrisOrchestrator: ObservableObject {
     func showWorkspace(_ section: WorkspaceSection = .today) { collapsePresence(); workspaceSection = section; openWorkspace?() }
     func timeString(_ seconds: TimeInterval) -> String { let s = max(0, Int(ceil(seconds))); return String(format: "%02d:%02d", s / 60, s % 60) }
     func shutdown() {
+        computer.shutdown()
         knowledgeScanTask?.cancel()
         welcome.pause(); connectionTimeout?.cancel(); agents.shutdown()
         connections.stopAutomaticRefresh(); connections.cancel(); accounts.cancel(); voice.stop(); voice.stopSpeaking(); modelTask?.cancel(); contextTask?.cancel(); sessionTimer?.invalidate(); network.cancel(); save()

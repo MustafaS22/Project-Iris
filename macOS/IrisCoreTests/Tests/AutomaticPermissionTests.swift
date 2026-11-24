@@ -6,7 +6,7 @@ final class AutomaticPermissionTests: XCTestCase {
         for type in ActionPolicy.types where !["drawOnScreen", "guideControl", "focusControl"].contains(type) { XCTAssertFalse(ActionPolicy.mayRunAutomatically(.init(type: type), enabled: false)) }
     }
     func testAlwaysAllowCoversSupportedComputerActions() {
-        for type in ActionPolicy.types.subtracting(["generateImage"]) { XCTAssertTrue(ActionPolicy.mayRunAutomatically(.init(type: type), enabled: true), type) }
+        for type in ActionPolicy.types.subtracting(["generateImage", "computerTask"]) { XCTAssertTrue(ActionPolicy.mayRunAutomatically(.init(type: type), enabled: true), type) }
     }
     func testPaidAndUnknownActionsStillNeedReview() {
         XCTAssertFalse(ActionPolicy.mayRunAutomatically(.init(type: "generateImage"), enabled: true))

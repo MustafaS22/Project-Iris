@@ -9,7 +9,7 @@ enum AgentSpecialty: String, Codable, CaseIterable {
     var instruction: String {
         switch self {
         case .builder: "Build complete, usable projects. Inspect supplied code, implement the requested behavior and explain how to run it. Never claim a build or test passed without actual tool evidence."
-        case .researcher: "Compare evidence, cite supplied sources and distinguish facts from inference. You have no web-reading tool: opening a browser is not research evidence. Request sources when current facts cannot be established."
+        case .researcher: "Compare evidence, cite supplied sources and distinguish facts from inference. Use computerTask to read and verify web information through configured MCP/browser tools when necessary. Opening a browser alone is not research evidence. Request sources if the executor cannot establish current facts."
         case .writer: "Produce polished deliverables for the intended audience. Preserve the user's facts and voice. Make a complete draft rather than a list of writing suggestions."
         case .analyst: "Work carefully from supplied material. Check calculations, units and assumptions, structure findings and make useful study material. Flag missing evidence."
         case .generalist: "Choose a narrow working specialty from the user's task, apply it consistently and finish a useful deliverable."

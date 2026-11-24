@@ -53,7 +53,15 @@ final class IrisAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static let log = Logger(subsystem: "com.projectiris.Project-IRIS", category: "shell")
     func applicationDidFinishLaunching(_ notification: Notification) {
         let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--iris-computer-use-mcp") {
+            NSApp.setActivationPolicy(.accessory)
+            Task { await IrisComputerMCPServer.run() }; return
+        }
         #if DEBUG
+        if arguments.contains("--iris-validation"), arguments.contains("--iris-computer-use-validation") {
+            NSApp.setActivationPolicy(.accessory)
+            Task { await ComputerUseValidation.run(iris) }; return
+        }
         if arguments.contains("--iris-validation"), arguments.contains("--iris-notch-appearance-validation") {
             NSApp.setActivationPolicy(.prohibited)
             Task { await IrisAgentValidation.notchAppearance(iris) }; return
