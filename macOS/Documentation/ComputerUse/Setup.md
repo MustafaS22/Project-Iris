@@ -2,9 +2,9 @@
 
 1. Connect an AI in Settings → AI providers. Choose a model that reliably follows structured instructions; choose a vision-capable model for screenshot questions.
 2. Open Settings → Privacy & access and enable Iris's macOS Accessibility access for native input. Screen Recording is needed for screenshots, not semantic inspection. Keep the installed app at `/Applications/Iris.app`; no privacy database resets are needed.
-3. In Settings → Computer, choose Observe, Assist or Autonomous. Assist is the default. Grant only the folders needed for the task. Optionally enable task screenshots; read the sharing disclosure first.
-4. Type `@computer` followed by the objective, or ask a normal multi-step computer question. Review the task scope, then review individual input/tool requests. The activity card appears in desktop and notch chat.
-5. Use Pause while navigating manually, Resume when ready, or Stop/Escape to cancel. Real manual input also pauses active automation. After a timeout or restart, inspect the result and start a new task rather than blindly repeating a write/send.
+3. In Settings → Computer, choose Observe, Assist or Autonomous. Assist is the default. Grant only the folders needed for the task. Enable task screenshots for visual interfaces after reading the sharing disclosure. The active task card also has an Enable screen awareness button.
+4. Type `@computer` followed by the objective, or ask a normal multi-step computer question. Review the task scope. Recognized routine native navigation and local editing can proceed; consequential actions, ambiguous targets, file operations and external tools retain review. The activity card appears in desktop and notch chat.
+5. Use Pause while navigating manually, Resume when ready, or Stop/Escape to cancel. Moving the mouse alone does not interrupt Iris. Manual clicks, typing and scrolling invalidate pending input and trigger a fresh observation after a short quiet period. Explicit Pause waits for Resume. After a timeout or restart, inspect the result and start a new task rather than blindly repeating a write/send.
 
 ## MCP connections
 

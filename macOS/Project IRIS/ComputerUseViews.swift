@@ -20,8 +20,13 @@ struct ComputerActivityView: View {
                     Button { session.paused ? session.resume() : session.pause() } label: { Image(systemName:session.paused ? "play.fill" : "pause.fill") }.help(session.paused ? "Resume after checking the current app" : "Pause computer task")
                     Button { session.stop() } label: { Image(systemName:"stop.fill") }.help("Stop immediately · Escape")
                 }
+                if !session.controlledApplication.isEmpty { Text(session.controlledApplication).font(.caption.weight(.semibold)).foregroundStyle(accent) }
                 Text(session.objective).font(.callout).lineLimit(2)
                 Label(session.policy.shareScreen ? "Screen images may be shared with your AI during this task" : "Local interface inspection · images off",systemImage:session.policy.shareScreen ? "eye" : "lock.shield").font(.caption2).foregroundStyle(IrisDesign.secondary)
+                if !session.policy.shareScreen {
+                    Button("Enable screen awareness") { session.policy.shareScreen = true }.font(.caption)
+                        .help("Share task window images with your selected AI; no idle recording")
+                }
                 if session.awaitingApproval {
                     Divider()
                     Text("Review this action").font(.subheadline.weight(.semibold))
@@ -45,9 +50,9 @@ struct ComputerAutonomySettings: View {
         VStack(alignment:.leading,spacing:16) {
             Text("Computer use").font(.headline)
             IrisPicker("Execution mode",selection:$session.policy.mode,options:ComputerMode.allCases.map{.init(value:$0,title:$0.rawValue)})
-            Text("Observe inspects without acting. Assist reviews changes. Autonomous permits app focus, window resizing, scrolling and cursor movement; clicks, typing, shortcuts, file changes and external MCP tools still require explicit approval.").font(.callout).foregroundStyle(IrisDesign.secondary)
+            Text("Observe inspects without acting. Assist and Autonomous allow recognized routine navigation and local editing. Ambiguous targets, consequential actions, file changes and external tools require review. Excluded apps and individual tool permissions always apply.").font(.callout).foregroundStyle(IrisDesign.secondary)
             Toggle("Allow task screenshots to be shared with my AI",isOn:$session.policy.shareScreen).toggleStyle(.switch)
-            Text("Off by default. Images are captured only when a task requests them, kept in memory, and removed when it stops. Password controls and excluded apps are blocked when detectable. AX labels, OCR and approved file text can also be sent to your selected AI. Escape stops the task; manual interaction pauses it.").font(.caption).foregroundStyle(IrisDesign.secondary)
+            Text("Off by default. Images are captured at task start and after meaningful native actions, kept in memory, and removed when it stops. Password controls and excluded apps are blocked when detectable. AX labels, OCR and approved file text can also be sent to your selected AI. Escape stops the task; manual clicks, typing and scrolling invalidate pending actions and trigger a fresh observation after you finish. Mouse movement alone does not interrupt Iris.").font(.caption).foregroundStyle(IrisDesign.secondary)
             Button("Exclude an application…") {
                 let panel = NSOpenPanel(); panel.allowedContentTypes = [.applicationBundle]; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false; panel.directoryURL = URL(fileURLWithPath:"/Applications"); panel.prompt = "Exclude app"
                 if panel.runModal() == .OK, let url = panel.url, let identifier = Bundle(url:url)?.bundleIdentifier, !session.policy.excludedApps.contains(identifier) { session.policy.excludedApps.append(identifier) }

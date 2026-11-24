@@ -28,6 +28,8 @@ struct ComputerObservation {
 @MainActor final class NativeComputerUse {
     var policy = ComputerUsePolicy()
     var validateInput: (() throws -> Void)?
+    let cursor = IrisComputerCursor()
+    var onApplication: ((String)->Void)?
     private var lastTreeHasSecureField = false
     private var elementsCaptured = Date.distantPast
     private var elements: [String: (AXUIElement, pid_t)] = [:]
@@ -38,7 +40,7 @@ struct ComputerObservation {
         let string: Value = .object(["type": "string"]), number: Value = .object(["type": "number"])
         let integer: Value = .object(["type": "integer"])
         let point: [String:Value] = ["frame": string, "x": number, "y": number]
-        let target: [String:Value] = point.merging(["element": string]) { a,_ in a }
+        let target: [String:Value] = point.merging(["element": string, "delivery": string]) { a,_ in a }
         return [
             .init(name:"get_displays", detail:"List display IDs and global point bounds. No image capture."),
             .init(name:"list_applications", detail:"Find installed application names and exact bundle IDs before launching an unfamiliar app.", properties:["query":string]),
@@ -49,15 +51,15 @@ struct ComputerObservation {
             .init(name:"wait_for_element", detail:"Wait at most 8 seconds for a matching current app control.", properties:["query":string], required:["query"]),
             .init(name:"get_screen", detail:"Capture foreground window, or an explicitly chosen display ID. Excluded apps are removed. Returns frame token, dimensions, OCR and image. Requires screen sharing.", properties:["display":integer]),
             .init(name:"capture_window", detail:"Capture an allowed visible window by window ID.", properties:["window":integer], required:["window"]),
-            .init(name:"click", detail:"Press a fresh AX element, otherwise click relative to fresh frame in POINTS. Not pixels/normalized.", properties:target),
+            .init(name:"click", detail:"Press a fresh AX element independently; otherwise click fresh frame-relative POINTS using shared system input. Optional delivery=application attempts app-targeted mouse events; verify acceptance before claiming success.", properties:target),
             .init(name:"double_click", detail:"Double click a fresh element or frame-relative point.", properties:target),
             .init(name:"right_click", detail:"Right click a fresh element or frame-relative point.", properties:target),
             .init(name:"move_cursor", detail:"Move cursor to a fresh element or frame-relative point.", properties:target),
             .init(name:"drag", detail:"Drag from fresh target to frame-relative destination in points.", properties:target.merging(["to_x":number,"to_y":number]) { a,_ in a }, required:["to_x","to_y"]),
-            .init(name:"scroll", detail:"Scroll current app; vertical/horizontal pixel deltas, maximum 1200.", properties:["vertical":integer,"horizontal":integer]),
-            .init(name:"type_text", detail:"Insert literal text into the focused editable AX control only. Does not press Return.", properties:["text":string,"element":string], required:["text","element"]),
-            .init(name:"press_key", detail:"Press named key: return, tab, escape, space, backspace, left, right, up, down.", properties:["key":string], required:["key"]),
-            .init(name:"keyboard_shortcut", detail:"Press named key, letter, digit or F1–F12 with modifiers command, option, control, shift.", properties:["key":string,"modifiers":.object(["type":"array","items":string])], required:["key","modifiers"]),
+            .init(name:"scroll", detail:"Scroll current app; vertical/horizontal pixel deltas, maximum 1200.", properties:["vertical":integer,"horizontal":integer,"delivery":string]),
+            .init(name:"type_text", detail:"Insert literal text into the focused editable AX control only. Does not press Return.", properties:["text":string,"element":string,"delivery":string], required:["text","element"]),
+            .init(name:"press_key", detail:"Press named key: return, tab, escape, space, backspace, left, right, up, down.", properties:["key":string,"delivery":string], required:["key"]),
+            .init(name:"keyboard_shortcut", detail:"Press named key, letter, digit or F1–F12 with modifiers command, option, control, shift.", properties:["key":string,"delivery":string,"modifiers":.object(["type":"array","items":string])], required:["key","modifiers"]),
             .init(name:"launch_application", detail:"Launch installed app by bundle ID; never an arbitrary executable.", properties:["bundle_id":string], required:["bundle_id"]),
             .init(name:"focus_window", detail:"Focus a running allowed app by bundle ID.", properties:["bundle_id":string], required:["bundle_id"]),
             .init(name:"resize_window", detail:"Resize current focused window in points (200–4000).", properties:["width":number,"height":number], required:["width","height"]),
@@ -72,6 +74,7 @@ struct ComputerObservation {
     private func app() throws -> NSRunningApplication {
         guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != ProcessInfo.processInfo.processIdentifier, app.bundleIdentifier != Bundle.main.bundleIdentifier,
               !policy.excludedApps.contains(app.bundleIdentifier ?? "") else { throw failure("Focus an allowed application outside Iris first.") }
+        onApplication?(app.localizedName ?? "Application")
         return app
     }
     private func root(_ app: NSRunningApplication) -> AXUIElement {
@@ -99,19 +102,29 @@ struct ComputerObservation {
             if let menu = attribute(application,kAXMenuBarAttribute), CFGetTypeID(menu) == AXUIElementGetTypeID() { roots.append((menu as! AXUIElement,0)) }
             if let window = attribute(application,kAXFocusedWindowAttribute), CFGetTypeID(window) == AXUIElementGetTypeID() { roots.append((window as! AXUIElement,0)) }
             if roots.isEmpty { roots = [(application,0)] }
-            var stack = roots
-            while visited < 350, Date().timeIntervalSince(started) < 2, let (e,depth) = stack.popLast() {
+            // Prioritize the focused editor ahead of large sidebars and virtualized lists.
+            let focused = attribute(application,kAXFocusedUIElementAttribute)
+            if let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() { roots.append((focused as! AXUIElement,0)) }
+            var stack = Array(roots.reversed())
+            while visited < 350, Date().timeIntervalSince(started) < 2, !stack.isEmpty {
+                let (e,depth) = stack.removeFirst()
                 try Task.checkCancellation(); visited += 1
                 if attribute(e,"AXHidden") as? Bool == true { continue }
                 if secure(e) { hasSecureFields = true; rows.append("[Secure field: redacted]"); continue }
                 let role = string(e,kAXRoleAttribute)
+                // Closed menus expose hundreds of zero-size descendants on macOS.
+                // They must not exhaust the observation budget ahead of visible web content.
+                if [kAXMenuRole,kAXMenuItemRole].contains(role) {
+                    guard let bounds = rect(e), !bounds.isEmpty else { continue }
+                }
                 let title = [string(e,kAXTitleAttribute),string(e,kAXDescriptionAttribute),string(e,kAXValueAttribute)].filter{!$0.isEmpty}.joined(separator:" · ")
                 if !title.isEmpty || [kAXTextFieldRole,kAXTextAreaRole,kAXButtonRole,kAXCheckBoxRole,kAXPopUpButtonRole].contains(role), query == nil || (role + " " + title).localizedCaseInsensitiveContains(query!) {
                     let id = "\(prefix)-\(visited)"; targets[id] = (e,pid)
                     let bounds = rect(e).map { "bounds=\($0.minX),\($0.minY),\($0.width),\($0.height) global points" } ?? ""
-                    rows.append("\(id) \(role) \(String(title.prefix(180))) \(bounds)")
+                    let focus = focused.map { CFEqual($0,e) } == true ? " focused=true" : ""
+                    rows.append("\(id) \(role) \(String(title.prefix(180))) \(bounds)\(focus)")
                 }
-                if depth < 14, let children = attribute(e,kAXChildrenAttribute) as? [AXUIElement] { stack.append(contentsOf:children.prefix(80).reversed().map{($0,depth+1)}) }
+                if depth < 14, let children = attribute(e,kAXChildrenAttribute) as? [AXUIElement] { stack.append(contentsOf:children.prefix(80).map{($0,depth+1)}) }
             }
             if !stack.isEmpty { rows.append("[Inspection truncated at its depth, node or time budget. Refine the query or use a screenshot; do not assume omitted controls are absent.]") }
             return .init(rows:rows.prefix(100).joined(separator:"\n"),hasSecureFields:hasSecureFields,elements:targets)
@@ -123,9 +136,13 @@ struct ComputerObservation {
         return heading + capture.rows
     }
     func observe(includeImage: Bool = false) async throws -> ComputerObservation {
-        let text = try await tree()
-        if includeImage { let result = try await capture(windowID:nil); return .init(text:text + "\n" + result, image:lastImage) }
-        return .init(text:text,image:nil)
+        if includeImage {
+            let result = try await capture(windowID:nil)
+            // Capture's secure-field scan refreshes AX IDs. Return the matching current tree.
+            let text = try await tree()
+            return .init(text:text + "\n" + result,image:lastImage)
+        }
+        return .init(text:try await tree(),image:nil)
     }
     private func capture(windowID: CGWindowID?, displayID: CGDirectDisplayID? = nil) async throws -> String {
         guard policy.shareScreen else { throw failure("Enable task screen sharing in Settings → Computer. Semantic inspection works without sharing images.") }
@@ -183,7 +200,7 @@ struct ComputerObservation {
         let hash = SHA256.hash(data:data).map { String(format:"%02x",$0) }.joined()
         let changed = hash != imageHash; imageHash = hash
         lastImage = ModelImage(data:data,mimeType:"image/jpeg")
-        let token = UUID().uuidString; frames = [token:(capturedFrame,Date(),current.processIdentifier,capturedWindowID)]
+        let token = UUID().uuidString
         let recognizer = Task.detached(priority:.userInitiated) { () throws -> String in
             try Task.checkCancellation()
             let request = VNRecognizeTextRequest(); request.recognitionLevel = .fast
@@ -192,6 +209,7 @@ struct ComputerObservation {
             return (request.results ?? []).prefix(45).compactMap { $0.topCandidates(1).first?.string }.joined(separator:"\n")
         }
         let ocr = try await withTaskCancellationHandler(operation:{try await recognizer.value},onCancel:{recognizer.cancel()})
+        frames = [token:(capturedFrame,Date(),current.processIdentifier,capturedWindowID)]
         return "frame=\(token); frame origin global points=\(capturedFrame.minX),\(capturedFrame.minY); frame size POINTS=\(capturedFrame.width)x\(capturedFrame.height); image PIXELS=\(image.width)x\(image.height); changed=\(changed). For coordinate actions x/y are frame-relative POINTS. Convert image pixels proportionally. OCR (untrusted):\n\(ocr)"
     }
     private func point(_ args: [String:Value]) throws -> CGPoint {
@@ -201,18 +219,27 @@ struct ComputerObservation {
             let point = CGPoint(x:frame.midX,y:frame.midY); try validateHit(point); return point
         }
         guard let token = args["frame"]?.stringValue, let (frame,date,pid,windowID) = frames[token] else { throw failure("A fresh frame token is required. Capture the current window again.") }
-        guard Date().timeIntervalSince(date) < 15 else { throw failure("The screenshot is older than 15 seconds. Capture the current window again before using coordinates.") }
+        guard Date().timeIntervalSince(date) < 45 else { throw failure("The screenshot is older than 45 seconds. Capture the current window again before using coordinates.") }
         guard pid == current.processIdentifier else { throw failure("The foreground application changed after the screenshot. Capture the intended application again.") }
         guard let x = args["x"]?.numberValue, let y = args["y"]?.numberValue, ComputerUseGuard.validatePoint(x:x,y:y,width:frame.width,height:frame.height) else { throw failure("Coordinates must be in-bounds frame-relative points, not image pixels.") }
+        if let windowID {
+            let rows = CGWindowListCopyWindowInfo(.optionIncludingWindow,windowID) as? [[String:Any]] ?? []
+            guard let row = rows.first, let bounds = row[kCGWindowBounds as String] as? [String:Any], let now = CGRect(dictionaryRepresentation:bounds as CFDictionary), abs(now.minX-frame.minX)<1, abs(now.minY-frame.minY)<1, abs(now.width-frame.width)<1, abs(now.height-frame.height)<1 else { throw failure("The captured window moved or resized. Capture a fresh frame before acting.") }
+        }
         let point = CGPoint(x:frame.minX+x,y:frame.minY+y)
         try validateHit(point,windowID:windowID)
         return point
     }
     private func validateHit(_ point: CGPoint, windowID: CGWindowID? = nil) throws {
+        guard NSScreen.screens.contains(where: { screen in
+            guard let id = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value else { return false }
+            return CGDisplayBounds(id).contains(point)
+        }) else { throw failure("The target is off-screen. Move the window or scroll the control into view before acting.") }
         let visible = CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]] ?? []
         for row in visible where row[kCGWindowLayer as String] as? Int == 0 {
             guard let bounds = row[kCGWindowBounds as String] as? [String:Any], let rect = CGRect(dictionaryRepresentation:bounds as CFDictionary), rect.contains(point), let pid = row[kCGWindowOwnerPID as String] as? Int32 else { continue }
             guard pid != ProcessInfo.processInfo.processIdentifier, NSRunningApplication(processIdentifier:pid)?.bundleIdentifier != Bundle.main.bundleIdentifier else { throw failure("Iris covers the target. Collapse the notch or move the floating avatar, then resume.") }
+            guard pid == NSWorkspace.shared.frontmostApplication?.processIdentifier else { throw failure("Another application covers this pointer target. Inspect the foreground app again.") }
             guard !policy.excludedApps.contains(NSRunningApplication(processIdentifier:pid)?.bundleIdentifier ?? "") else { throw failure("The pointer target is inside an excluded application.") }
             if let windowID, let actual = row[kCGWindowNumber as String] as? UInt32, windowID != actual { throw failure("Another window covers the visual target. Inspect the new interface before acting.") }
             return
@@ -223,17 +250,49 @@ struct ComputerObservation {
         guard let id = args["element"]?.stringValue, let (element,_) = elements[id] else { return "Visual or application-level target" }
         return "Actual UI target: " + [string(element,kAXRoleAttribute),string(element,kAXTitleAttribute),string(element,kAXDescriptionAttribute)].filter{!$0.isEmpty}.joined(separator:" · ")
     }
-    private func post(_ type: CGEventType, at: CGPoint, button: CGMouseButton = .left, count: Int = 1) throws {
+    func isRoutine(_ name: String, _ args: [String:Value]) -> Bool {
+        guard let current = try? app() else {
+            return ["launch_application", "focus_window", "list_applications", "get_displays"].contains(name)
+        }
+        var role = "", label = ""
+        if let id = args["element"]?.stringValue, Date().timeIntervalSince(elementsCaptured)<60, let (element,pid) = elements[id], pid == current.processIdentifier, !secure(element) {
+            role = string(element,kAXRoleAttribute)
+            label = [string(element,kAXTitleAttribute),string(element,kAXDescriptionAttribute)].filter{!$0.isEmpty}.joined(separator:" ")
+        }
+        return policy.permitsRoutineAction(name,role:role,label:label,bundle:current.bundleIdentifier ?? "",key:args["key"]?.stringValue?.lowercased() ?? "",modifiers:(args["modifiers"]?.arrayValue ?? []).compactMap(\.stringValue))
+    }
+    private func indicate(_ point: CGPoint, current: NSRunningApplication, independent: Bool, applicationEvents: Bool = false) async throws {
+        try await cursor.move(to:point,application:current.localizedName ?? "Application",independent:independent,applicationEvents:applicationEvents)
+        try validateInput?()
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == current.processIdentifier else { throw failure("The foreground app changed before input. Observe again.") }
+    }
+    private func post(_ type: CGEventType, at: CGPoint, button: CGMouseButton = .left, count: Int = 1, pid: pid_t? = nil) throws {
         if type != .leftMouseUp && type != .rightMouseUp { try Task.checkCancellation(); try validateInput?() }
         guard let event = CGEvent(mouseEventSource:nil,mouseType:type,mouseCursorPosition:at,mouseButton:button) else { throw failure("macOS could not create the pointer event.") }
         event.setIntegerValueField(.eventSourceUserData,value:0x49524953)
-        event.setIntegerValueField(.mouseEventClickState,value:Int64(count)); event.post(tap:.cghidEventTap)
+        event.setIntegerValueField(.mouseEventClickState,value:Int64(count))
+        if let pid {
+            let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]] ?? []
+            if let window = windows.first(where: { row in
+                guard row[kCGWindowOwnerPID as String] as? Int32 == pid, row[kCGWindowLayer as String] as? Int == 0, let bounds = row[kCGWindowBounds as String] as? [String:Any], let frame = CGRect(dictionaryRepresentation:bounds as CFDictionary) else { return false }
+                return frame.contains(at)
+            }), let number = window[kCGWindowNumber as String] as? Int64 {
+                event.setIntegerValueField(.mouseEventWindowUnderMousePointer,value:number)
+                event.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent,value:number)
+            }
+            event.postToPid(pid)
+        } else { event.post(tap:.cghidEventTap) }
     }
     func execute(_ name: String, _ args: [String:Value]) async throws -> ComputerObservation {
         try Task.checkCancellation()
         guard let tool = Self.tools.first(where:{$0.name == name}), Set(args.keys).isSubset(of:Set(tool.properties.keys)), tool.required.allSatisfy({args[$0] != nil}) else { throw failure("Unknown tool, missing argument, or unsupported argument.") }
         let targetBundle = args["bundle_id"]?.stringValue ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         guard policy.permits(name,app:targetBundle) else { throw failure("This tool or app is blocked by the Computer permission policy.") }
+        // AX is preferred below. Raw application-targeted events are opt-in because
+        // real apps may accept some key events while ignoring Return or mouse events.
+        let delivery = args["delivery"]?.stringValue ?? "system"
+        guard ["application", "system"].contains(delivery) else { throw failure("Delivery must be application or system.") }
+        let shared = delivery == "system"
         var output = ""
         switch name {
         case "get_displays": output = NSScreen.screens.map { s in
@@ -290,36 +349,53 @@ struct ComputerObservation {
             case "click", "double_click", "right_click", "move_cursor", "drag":
                 if name == "click", Date().timeIntervalSince(elementsCaptured) < 60, let id = args["element"]?.stringValue, let (element,pid) = elements[id], pid == current.processIdentifier, !secure(element) {
                     guard attribute(element,kAXEnabledAttribute) as? Bool != false else { throw failure("The target is disabled. Inspect the interface instead of clicking it.") }
+                    if let bounds = rect(element) { try await indicate(CGPoint(x:bounds.midX,y:bounds.midY),current:current,independent:true) }
                     try validateInput?()
                     let outcome = AXUIElementPerformAction(element,kAXPressAction as CFString)
-                    if outcome == .success { output = "Performed AXPress. Inspect result to verify."; break }
+                    if outcome == .success { cursor.feedback(); output = "Performed AXPress. Inspect result to verify."; break }
                     guard outcome == .actionUnsupported else { throw failure("The accessibility action returned an uncertain result. Inspect the interface before repeating it.") }
                 }
                 let p = try point(args)
-                if name == "move_cursor" { try post(.mouseMoved,at:p); break }
+                try await indicate(p,current:current,independent:false,applicationEvents:!shared)
+                _ = try point(args)
+                if name == "move_cursor" { try post(.mouseMoved,at:p,pid:shared ? nil : current.processIdentifier); break }
                 if name == "drag" {
                     var destinationArgs = args; destinationArgs.removeValue(forKey:"element"); destinationArgs["x"] = args["to_x"]; destinationArgs["y"] = args["to_y"]
                     let end = try point(destinationArgs)
-                    try post(.leftMouseDown,at:p); defer { try? post(.leftMouseUp,at:CGEvent(source:nil)?.location ?? p) }
-                    for step in 1...18 { try await Task.sleep(for:.milliseconds(16)); let t = Double(step)/18; try post(.leftMouseDragged,at:CGPoint(x:p.x+(end.x-p.x)*t,y:p.y+(end.y-p.y)*t)) }
+                    try post(.leftMouseDown,at:p,pid:shared ? nil : current.processIdentifier); var releasePoint = p; defer { try? post(.leftMouseUp,at:releasePoint,pid:shared ? nil : current.processIdentifier) }
+                    for step in 1...18 { try await Task.sleep(for:.milliseconds(16)); let t = Double(step)/18; releasePoint = CGPoint(x:p.x+(end.x-p.x)*t,y:p.y+(end.y-p.y)*t); cursor.track(releasePoint); try post(.leftMouseDragged,at:releasePoint,pid:shared ? nil : current.processIdentifier) }
                     break
                 }
+                cursor.feedback()
                 let right = name == "right_click", count = name == "double_click" ? 2 : 1
-                for index in 1...count { try post(right ? .rightMouseDown : .leftMouseDown,at:p,button:right ? .right : .left,count:index); try post(right ? .rightMouseUp : .leftMouseUp,at:p,button:right ? .right : .left,count:index) }
+                for index in 1...count { try post(right ? .rightMouseDown : .leftMouseDown,at:p,button:right ? .right : .left,count:index,pid:shared ? nil : current.processIdentifier); try post(right ? .rightMouseUp : .leftMouseUp,at:p,button:right ? .right : .left,count:index,pid:shared ? nil : current.processIdentifier) }
             case "scroll":
                 let v = args["vertical"]?.intValue ?? 0, h = args["horizontal"]?.intValue ?? 0
                 guard (-1200...1200).contains(v), (-1200...1200).contains(h), let event = CGEvent(scrollWheelEvent2Source:nil,units:.pixel,wheelCount:2,wheel1:Int32(v),wheel2:Int32(h),wheel3:0) else { throw failure("Scroll deltas must be within ±1200.") }
-                try validateInput?(); event.setIntegerValueField(.eventSourceUserData,value:0x49524953); event.post(tap:.cghidEventTap)
+                guard let value = attribute(application,kAXFocusedWindowAttribute), CFGetTypeID(value) == AXUIElementGetTypeID(), let bounds = rect(value as! AXUIElement) else { throw failure("Cannot locate the scroll target window.") }
+                let center = CGPoint(x:bounds.midX,y:bounds.midY); try validateHit(center)
+                try await indicate(center,current:current,independent:false,applicationEvents:!shared)
+                event.location = center
+                try validateInput?(); event.setIntegerValueField(.eventSourceUserData,value:0x49524953); if shared { event.post(tap:.cghidEventTap) } else { event.postToPid(current.processIdentifier) }
             case "type_text":
                 guard let text = args["text"]?.stringValue, text.utf16.count <= 8000, let focused = attribute(application,kAXFocusedUIElementAttribute), CFGetTypeID(focused) == AXUIElementGetTypeID() else { throw failure("Select an editable field; text must be under 8,000 UTF-16 units.") }
                 let element = focused as! AXUIElement
                 guard let id = args["element"]?.stringValue, let (expected,pid) = elements[id], pid == current.processIdentifier, CFEqual(expected,element) else { throw failure("The focused field changed. Inspect the interface and select the intended field again.") }
                 guard !secure(element), [kAXTextFieldRole,kAXTextAreaRole,kAXComboBoxRole].contains(string(element,kAXRoleAttribute)) else { throw failure("The focused element is not an allowed editable field. Password entry is blocked.") }
+                if let bounds = rect(element) { try await indicate(CGPoint(x:bounds.midX,y:bounds.midY),current:current,independent:true) }
+                var settable = DarwinBoolean(false)
+                if AXUIElementIsAttributeSettable(element,kAXSelectedTextAttribute as CFString,&settable) == .success, settable.boolValue {
+                    try validateInput?()
+                    let outcome = AXUIElementSetAttributeValue(element,kAXSelectedTextAttribute as CFString,text as CFString)
+                    if outcome == .success { cursor.feedback(); output = "Inserted text through Accessibility without moving the system pointer. Inspect text to verify."; break }
+                    guard outcome == .attributeUnsupported || outcome == .notImplemented else { throw failure("Accessibility insertion returned an uncertain result. Read the field before retrying.") }
+                }
+                if let bounds = rect(element) { try await indicate(CGPoint(x:bounds.midX,y:bounds.midY),current:current,independent:false,applicationEvents:!shared) }
                 var chunks: [[UInt16]] = [[]]
                 for scalar in text.unicodeScalars { let units = Array(String(scalar).utf16); if chunks[chunks.count-1].count + units.count > 100 { chunks.append([]) }; chunks[chunks.count-1] += units }
                 for chunk in chunks where !chunk.isEmpty {
                     try Task.checkCancellation(); try validateInput?(); guard NSWorkspace.shared.frontmostApplication?.processIdentifier == current.processIdentifier else { throw failure("The focused app changed; input stopped.") }
-                    for down in [true,false] { guard let event = CGEvent(keyboardEventSource:nil,virtualKey:0,keyDown:down) else { throw failure("Cannot create keyboard event.") }; chunk.withUnsafeBufferPointer { event.keyboardSetUnicodeString(stringLength:chunk.count,unicodeString:$0.baseAddress!) }; event.setIntegerValueField(.eventSourceUserData,value:0x49524953); event.post(tap:.cghidEventTap) }
+                    for down in [true,false] { guard let event = CGEvent(keyboardEventSource:nil,virtualKey:0,keyDown:down) else { throw failure("Cannot create keyboard event.") }; chunk.withUnsafeBufferPointer { event.keyboardSetUnicodeString(stringLength:chunk.count,unicodeString:$0.baseAddress!) }; event.setIntegerValueField(.eventSourceUserData,value:0x49524953); if shared { event.post(tap:.cghidEventTap) } else { event.postToPid(current.processIdentifier) } }
                     await Task.yield()
                 }
             case "press_key", "keyboard_shortcut":
@@ -331,7 +407,7 @@ struct ComputerObservation {
                     switch modifier.stringValue { case "command": flags.insert(.maskCommand); case "option": flags.insert(.maskAlternate); case "control": flags.insert(.maskControl); case "shift": flags.insert(.maskShift); default: throw failure("Unknown keyboard modifier.") }
                 }
                 try validateInput?()
-                for down in [true,false] { let event = CGEvent(keyboardEventSource:nil,virtualKey:code,keyDown:down)!; event.flags = flags; event.setIntegerValueField(.eventSourceUserData,value:0x49524953); event.post(tap:.cghidEventTap) }
+                for down in [true,false] { let event = CGEvent(keyboardEventSource:nil,virtualKey:code,keyDown:down)!; event.flags = flags; event.setIntegerValueField(.eventSourceUserData,value:0x49524953); if shared { event.post(tap:.cghidEventTap) } else { event.postToPid(current.processIdentifier) } }
             case "resize_window", "close_window":
                 guard let value = attribute(application,kAXFocusedWindowAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() else { throw failure("No focused window.") }
                 let window = value as! AXUIElement
@@ -344,7 +420,7 @@ struct ComputerObservation {
                 }
             default: throw failure("Unsupported native action.")
             }
-            if output.isEmpty { output = "Input delivered to \(current.localizedName ?? "application"). Inspect the resulting interface before claiming success." }
+            if output.isEmpty { output = "Input delivered via \(shared ? "shared system input" : "application-targeted events") to \(current.localizedName ?? "application"). Inspect the resulting interface before claiming success." }
         }
         return .init(text:output,image:nil)
     }

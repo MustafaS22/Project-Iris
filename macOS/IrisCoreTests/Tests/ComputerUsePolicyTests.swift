@@ -2,6 +2,22 @@ import XCTest
 @testable import IrisCore
 
 final class ComputerUsePolicyTests: XCTestCase {
+    func testRoutineActionsUseActualTargetsAndRetainConsequentialReview() {
+        let p = ComputerUsePolicy()
+        XCTAssertTrue(p.permitsRoutineAction("click",role:"AXTextField",label:"Search",bundle:"com.apple.Safari"))
+        XCTAssertTrue(p.permitsRoutineAction("type_text",role:"AXTextArea",label:"",bundle:"com.apple.Notes"))
+        for label in ["Send", "Submit answers", "Purchase", "Delete note", "Allow access", "Share document", "Reset settings"] {
+            XCTAssertFalse(p.permitsRoutineAction("click",role:"AXButton",label:label,bundle:"com.apple.Notes"))
+        }
+        XCTAssertFalse(p.permitsRoutineAction("click",role:"",label:"",bundle:"com.apple.Safari"))
+        XCTAssertFalse(p.permitsRoutineAction("type_text",role:"AXTextField",label:"Reply",bundle:"com.apple.Safari"))
+        XCTAssertFalse(p.permitsRoutineAction("press_key",role:"",label:"",bundle:"com.apple.Safari",key:"return"))
+    }
+    func testSyntheticEventIdentityAndPhysicalInput() {
+        XCTAssertTrue(ComputerUsePolicy.isSyntheticInput(marker:0x49524953,sourcePID:999,ownPID:100))
+        XCTAssertTrue(ComputerUsePolicy.isSyntheticInput(marker:0,sourcePID:100,ownPID:100))
+        XCTAssertFalse(ComputerUsePolicy.isSyntheticInput(marker:0,sourcePID:0,ownPID:100))
+    }
     func testObserveCannotActOrReachExcludedApps() {
         var policy = ComputerUsePolicy(); policy.mode = .observe
         for tool in ["click","type_text","keyboard_shortcut","file_write","launch_application"] { XCTAssertFalse(policy.permits(tool,app:"test.app")) }

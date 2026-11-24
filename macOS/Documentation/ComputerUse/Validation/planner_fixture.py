@@ -10,7 +10,7 @@ class Handler(BaseHTTPRequestHandler):
    folder=re.search(r'Computer test=([^,\n]+)',system).group(1).strip()
    path=re.search(r'file (loop-[^ ]+\.txt)',goal).group(1)
    history=system.split('RECENT ACTIONS:')[-1]
-   if 'native/file_read:' in history: decision={'done':True,'summary':'Verified the isolated file contains the actual HTTP MCP file contents.'}
+   if 'native/file_read:' in history: decision={'done':True,'summary':'Verified the isolated file contains the actual HTTP MCP file contents.','evidence':'HTTP real file contents'}
    elif 'native/file_write:' in history: decision={'tool':'file_read','server':'native','arguments':{'folder':folder,'path':path},'reason':'Read the isolated file to verify its exact contents'}
    elif 'read_test_file:' not in history and 'native/get_active_window:' in history:
     server=re.search(r'([A-Fa-f0-9-]{36})/read_test_file',system).group(1)

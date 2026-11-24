@@ -21,6 +21,27 @@ struct ComputerUsePolicy: Codable {
         // Never infer safety from a remote server's readOnlyHint or the model's description.
         external || (!Self.inspections.contains(name) && (mode != .autonomous || !Self.lowRisk.contains(name)))
     }
+    /// Safety is derived from the actual native target, never the planner's risk claim.
+    func permitsRoutineAction(_ name: String, role: String, label: String, bundle: String, key: String = "", modifiers: [String] = []) -> Bool {
+        guard mode != .observe else { return false }
+        let text = label.lowercased()
+        let sensitive = ["send", "submit", "publish", "purchase", "buy", "pay", "delete", "remove", "trash", "share", "invite", "grant", "allow", "password", "security", "install", "sign in", "log in", "confirm", "erase", "reset", "checkout"]
+        guard !sensitive.contains(where: text.contains) else { return false }
+        if Self.inspections.contains(name) || Self.lowRisk.contains(name) { return true }
+        let localEditors = ["com.apple.Notes", "com.apple.TextEdit", "com.apple.iWork.Pages", "com.apple.Pages", "com.arize.iris.computer-fixture"]
+        if name == "type_text" { return localEditors.contains(bundle) || text.contains("search") || text.contains("address") || text.contains("location") }
+        if name == "click" {
+            if ["AXTextField", "AXTextArea", "AXComboBox", "AXMenuBarItem", "AXTab", "AXRow", "AXOutlineRow"].contains(role) { return true }
+            return ["back", "forward", "search", "new note", "new folder", "new document", "file", "edit", "view", "window", "help", "cancel", "close", "next", "previous"].contains(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        if name == "press_key" { return ["escape", "tab", "left", "right", "up", "down", "home", "end", "pageup", "pagedown"].contains(key) }
+        if name == "keyboard_shortcut", modifiers == ["command"] { return ["l", "f", "a", "c"].contains(key) || (localEditors.contains(bundle) && ["n", "s", "b", "i"].contains(key)) }
+        return false
+    }
+    static func isSyntheticInput(marker: Int64, sourcePID: Int64, ownPID: Int32) -> Bool {
+        marker == 0x49524953 || sourcePID == Int64(ownPID)
+    }
+
 }
 struct ComputerHistoryEntry: Codable, Identifiable {
     var id = UUID()
