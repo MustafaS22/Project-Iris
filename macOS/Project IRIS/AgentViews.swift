@@ -48,6 +48,10 @@ struct AgentWorkspace: View {
                 Spacer()
                 Button { deploying = true } label: { Label("New agent", systemImage: "plus").font(.system(size: 12, weight: .medium)) }.buttonStyle(IrisActionStyle())
             }.padding(.horizontal, 28).padding(.top, 24).padding(.bottom, 12)
+            if store.computerBusy && iris.computer.delegated {
+                ComputerActivityView(session:iris.computer,accent:iris.accent)
+                    .padding(.horizontal,28).padding(.bottom,8)
+            }
             if let error = store.storageError { Text(error).font(.caption).foregroundStyle(.orange).padding(.horizontal, 28) }
             if store.runs.isEmpty {
                 Spacer()
@@ -187,6 +191,10 @@ struct NotchAgentsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack { Text("Your team").font(.system(size: 20, weight: .semibold)); Spacer(); Text("\(store.runningCount) working").font(.system(size: 11)).foregroundStyle(IrisDesign.secondary) }
+            if store.computerBusy && iris.computer.delegated && iris.computer.running {
+                Button("Review active computer task",systemImage:"cursorarrow") { iris.showWorkspace(.agents) }
+                    .buttonStyle(IrisActionStyle())
+            }
             if ordered.isEmpty { Text("Give a bigger task its own specialist. Use @agent in chat to get started.").font(.system(size: 13)).lineSpacing(4).foregroundStyle(IrisDesign.secondary) }
             else {
                 ScrollView(.horizontal) {

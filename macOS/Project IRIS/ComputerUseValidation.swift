@@ -145,6 +145,29 @@ import MCP
             loop.start("stop validation",preferences:preferences,files:iris.actions) { _ in }
             try await Task.sleep(for:.milliseconds(100)); loop.pause(); try require(loop.paused,"Pause failed"); loop.resume(); loop.stop()
             try require(!loop.running && !loop.awaitingApproval,"Stop left work running"); record("pause-stop","PASS: pause/resume state and stop cancel active local model task without executing an action"); loop.shutdown()
+            if AXIsProcessTrusted() {
+                let fixture = IrisMCPConfiguration(name:"Unused test server",url:"http://127.0.0.1:5198/mcp",enabled:false)
+                iris.computer.mcp.configurations = [fixture]
+                iris.computer.policy.mode = .autonomous
+                iris.computer.policy.shareScreen = false
+                iris.agents.didComplete = nil
+                iris.agents.answer = { run, _ in
+                    guard run.transcript.contains(where: { $0.text.contains("The input is labelled Validation input.") }) else {
+                        throw IrisFailure.message("Agent never received the actual computer answer")
+                    }
+                    return "The input is labelled Validation input."
+                }
+                var run = AgentRun(name:"Fixture agent",specialty:.researcher,hue:0.6,task:"Read the validation input label",context:"",preferences:preferences)
+                run.pending = [.init(type:"computerTask",target:"Inspect the focused validation app")]
+                let agentID = try iris.agents.deploy(run)
+                for _ in 0..<150 {
+                    if iris.agents.run(agentID)?.status == .completed || iris.agents.run(agentID)?.status == .failed { break }
+                    try await Task.sleep(for:.milliseconds(100))
+                }
+                try require(iris.agents.run(agentID)?.status == .completed, "Automatic agent screen answer did not finish: " + (iris.agents.run(agentID)?.error ?? iris.computer.phase))
+                try require(iris.computer.history.contains(where: { $0.tool == "native/get_accessibility_tree" && $0.succeeded }), "No native inspection was performed")
+                record("agent-computer-answer","PASS: autonomous agent delegated to the actual native executor, inspected a real AppKit field and returned a chat answer without mutation verification; local scripted planner")
+            }
             let manager = IrisMCPManager(); let config = IrisMCPConfiguration(name:"Native validation",command:Bundle.main.executablePath,arguments:["--iris-computer-use-mcp"],enabled:true)
             manager.configurations = [config]; await manager.connect(config.id)
             try require(manager.tools.count >= 20,"Native MCP discovery failed: " + (manager.status[config.id] ?? "unknown"))

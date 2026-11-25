@@ -287,10 +287,13 @@ final class IrisOrchestrator: ObservableObject {
         let images = shared.compactMap(\.image)
         guard images.count <= AttachmentReader.maximumCount else { error = "Use up to six images across chat attachments and Studio references."; return }
         voice.stop(); voice.stopSpeaking(); error = nil
-        if mention.computer {
+        if mention.computer && !mention.agent {
             guard !computer.running, !agents.computerBusy else { error = "A computer task is already active. Stop it before starting another."; return }
             messages.append(.init(role: "user", text: typed)); draft = ""
-            queueActions([.init(type: "computerTask", target: text)]); return
+            let action = AssistantAction(type:"computerTask",target:text)
+            if computer.policy.mode == .autonomous && !busy { perform(action,automatic:true) }
+            else { queueActions([action]) }
+            return
         }
         if shared.isEmpty, mention.creation == nil, mention.connectors.isEmpty, let fact = MemoryPolicy.explicitFact(text) {
             remember(fact)

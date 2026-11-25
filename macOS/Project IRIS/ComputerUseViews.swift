@@ -58,7 +58,7 @@ struct ComputerAutonomySettings: View {
         VStack(alignment:.leading,spacing:16) {
             Text("Computer use").font(.headline)
             IrisPicker("Execution mode",selection:$session.policy.mode,options:ComputerMode.allCases.map{.init(value:$0,title:$0.rawValue)})
-            Text("Observe inspects without acting. Assist and Autonomous allow recognized routine navigation and local editing. Ambiguous targets, consequential actions, file changes and external tools require review. Excluded apps and individual tool permissions always apply.").font(.callout).foregroundStyle(IrisDesign.secondary)
+            Text("Observe inspects without acting. Assist reviews task startup. Autonomous starts explicit @computer requests and agents’ delegated computer tasks automatically. Recognized routine navigation and local editing can proceed once a task starts. Ambiguous targets, consequential actions, file changes and external tools require review. Excluded apps and individual tool permissions always apply.").font(.callout).foregroundStyle(IrisDesign.secondary)
             Toggle("Allow task screenshots to be shared with my AI",isOn:$session.policy.shareScreen).toggleStyle(.switch)
             Text("Off by default. Images are captured at task start and after meaningful native actions, kept in memory, and removed when it stops. Password controls and excluded apps are blocked when detectable. AX labels, OCR and approved file text can also be sent to your selected AI. Escape stops the task; manual clicks, typing and scrolling invalidate pending actions and trigger a fresh observation after you finish. Mouse movement alone does not interrupt Iris.").font(.caption).foregroundStyle(IrisDesign.secondary)
             Button("Exclude an application…") {

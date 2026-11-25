@@ -64,8 +64,8 @@ enum AgentPolicy {
     static let maximumTurns = 4
     static let maximumActions = 12
     static let maximumSeconds: TimeInterval = 420
-    // No live screen drawing, screen inspection, paid generation or recursive delegation.
-    static let supportedActions: Set<String> = ["openApplication", "openURL", "searchWeb", "writeFile", "createFolder", "createDocument", "revealFile", "runProject"]
+    // Screen inspection runs through computerTask.
+    static let supportedActions: Set<String> = ["computerTask", "openApplication", "openURL", "searchWeb", "writeFile", "createFolder", "createDocument", "revealFile", "runProject"]
     static func shouldDeploy(_ text: String, explicit: Bool = false, contextual: Bool = false) -> Bool {
         let s = text.lowercased().replacingOccurrences(of: #"(?s)```.*?```|`[^`]*`"#, with: "", options: .regularExpression)
         if explicit { return true }

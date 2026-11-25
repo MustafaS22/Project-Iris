@@ -1,53 +1,140 @@
 import AppKit
+import QuartzCore
 
-/// A click-through indicator for actual native actions, not a second WindowServer pointer.
+/// Click-through marker for the executor's current target.
 @MainActor final class IrisComputerCursor {
     private var panel: NSPanel?
-    private let drawing = CursorDrawing(frame: NSRect(x:0,y:0,width:150,height:48))
+    private let drawing = CursorDrawing(frame:NSRect(x:0,y:0,width:48,height:48))
     private var active = false
     var accent: NSColor { get { drawing.accent } set { drawing.accent = newValue } }
+    private var reducesMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
     func show() { active = true }
-    func hide() { active = false; panel?.orderOut(nil) }
-    func move(to point: CGPoint, application: String, independent: Bool, applicationEvents: Bool = false) async throws {
+    func hide() {
+        active = false
+        drawing.setFloating(false)
+        panel?.orderOut(nil)
+    }
+
+    func move(to point: CGPoint) async throws {
         guard active else { return }
         if panel == nil {
             let window = NSPanel(contentRect:drawing.bounds,styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
-            window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = false
-            window.ignoresMouseEvents = true; window.level = .floating
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = false
+            window.ignoresMouseEvents = true
+            window.level = .floating
             window.collectionBehavior = [.canJoinAllSpaces,.fullScreenAuxiliary,.ignoresCycle]
-            window.contentView = drawing; panel = window
+            window.contentView = drawing
+            panel = window
         }
         guard let panel else { return }
-        drawing.caption = independent ? "Iris · Accessibility" : applicationEvents ? "Iris · app events" : "Iris · shared pointer"
-        drawing.application = application; drawing.needsDisplay = true
-        let top = NSScreen.screens.first?.frame.maxY ?? 0
-        let origin = NSPoint(x:point.x-8,y:top-point.y-40)
-        if !panel.isVisible { panel.setFrameOrigin(origin); panel.orderFrontRegardless() }
-        else { await NSAnimationContext.runAnimationGroup { context in context.duration = 0.14; context.timingFunction = CAMediaTimingFunction(name:.easeInEaseOut); panel.animator().setFrameOrigin(origin) } }
-        try await Task.sleep(for:.milliseconds(145)); try Task.checkCancellation()
+        drawing.setFloating(false)
+        let destination = origin(for:point)
+        if !panel.isVisible || reducesMotion {
+            panel.setFrameOrigin(destination)
+            panel.orderFrontRegardless()
+        } else {
+            await NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.18
+                context.timingFunction = CAMediaTimingFunction(name:.easeInEaseOut)
+                panel.animator().setFrameOrigin(destination)
+            }
+        }
+        try Task.checkCancellation()
+        if active { drawing.setFloating(!reducesMotion) }
     }
+
+    private func origin(for point: CGPoint) -> NSPoint {
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        return NSPoint(x:point.x-14,y:top-point.y-34)
+    }
+
     func track(_ point: CGPoint) {
         guard active else { return }
-        let top = NSScreen.screens.first?.frame.maxY ?? 0
-        panel?.setFrameOrigin(NSPoint(x:point.x-8,y:top-point.y-40))
+        drawing.setFloating(false)
+        panel?.setFrameOrigin(origin(for:point))
     }
+
     func feedback() {
         guard active else { return }
-        drawing.pulse = true; drawing.needsDisplay = true
-        Task { [weak self] in try? await Task.sleep(for:.milliseconds(180)); self?.drawing.pulse = false; self?.drawing.needsDisplay = true }
+        drawing.click(reduceMotion:reducesMotion)
+        drawing.setFloating(!reducesMotion)
     }
 }
-import QuartzCore
+
 @MainActor private final class CursorDrawing: NSView {
-    var caption = "Iris", application = "", pulse = false
-    var accent = NSColor(calibratedRed:0.92,green:0.72,blue:0.48,alpha:1)
-    override func draw(_ dirtyRect: NSRect) {
-        if pulse { accent.withAlphaComponent(0.24).setFill(); NSBezierPath(ovalIn:NSRect(x:0,y:19,width:27,height:27)).fill() }
-        let pointer = NSBezierPath(); pointer.move(to:NSPoint(x:8,y:40)); pointer.line(to:NSPoint(x:8,y:20)); pointer.line(to:NSPoint(x:14,y:25)); pointer.line(to:NSPoint(x:19,y:15)); pointer.line(to:NSPoint(x:23,y:17)); pointer.line(to:NSPoint(x:18,y:27)); pointer.line(to:NSPoint(x:26,y:27)); pointer.close()
-        NSColor.black.withAlphaComponent(0.9).setStroke(); pointer.lineWidth = 3; pointer.stroke(); accent.setFill(); pointer.fill()
-        NSColor.black.withAlphaComponent(0.8).setFill(); NSBezierPath(roundedRect:NSRect(x:30,y:5,width:118,height:36),xRadius:10,yRadius:10).fill()
-        for x: CGFloat in [37,43] { accent.setFill(); NSBezierPath(roundedRect:NSRect(x:x,y:26,width:3,height:7),xRadius:1.5,yRadius:1.5).fill() }
-        (caption as NSString).draw(at:NSPoint(x:51,y:25),withAttributes:[.font:NSFont.systemFont(ofSize:8,weight:.semibold),.foregroundColor:accent])
-        (String(application.prefix(23)) as NSString).draw(at:NSPoint(x:37,y:11),withAttributes:[.font:NSFont.systemFont(ofSize:10,weight:.medium),.foregroundColor:NSColor.white])
+    private let arrow = CAShapeLayer()
+    private let ripple = CAShapeLayer()
+    var accent = NSColor(calibratedRed:0.92,green:0.72,blue:0.48,alpha:1) {
+        didSet { arrow.fillColor = accent.cgColor; ripple.strokeColor = accent.cgColor }
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame:frame)
+        wantsLayer = true
+        let path = CGMutablePath()
+        path.move(to:CGPoint(x:14,y:34))
+        path.addLine(to:CGPoint(x:15.5,y:13.5))
+        path.addQuadCurve(to:CGPoint(x:17.5,y:13),control:CGPoint(x:15.7,y:11.5))
+        path.addLine(to:CGPoint(x:21,y:18))
+        path.addLine(to:CGPoint(x:25,y:10.5))
+        path.addQuadCurve(to:CGPoint(x:29,y:12.6),control:CGPoint(x:27.5,y:8.8))
+        path.addLine(to:CGPoint(x:25,y:20))
+        path.addLine(to:CGPoint(x:31.3,y:20.2))
+        path.addQuadCurve(to:CGPoint(x:31.9,y:22.4),control:CGPoint(x:33.4,y:20.5))
+        path.closeSubpath()
+        arrow.path = path
+        arrow.fillColor = accent.cgColor
+        arrow.strokeColor = NSColor.black.withAlphaComponent(0.8).cgColor
+        arrow.lineWidth = 1.8
+        arrow.lineJoin = .round
+        arrow.shadowColor = NSColor.black.cgColor
+        arrow.shadowOpacity = 0.42
+        arrow.shadowRadius = 3
+        arrow.shadowOffset = CGSize(width:0,height:-2)
+        ripple.bounds = CGRect(x:0,y:0,width:24,height:24)
+        ripple.position = CGPoint(x:14,y:34)
+        ripple.path = CGPath(ellipseIn:CGRect(x:2,y:2,width:20,height:20),transform:nil)
+        ripple.fillColor = nil
+        ripple.strokeColor = accent.cgColor
+        ripple.lineWidth = 1.4
+        ripple.opacity = 0
+        layer?.addSublayer(ripple)
+        layer?.addSublayer(arrow)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
+
+    func setFloating(_ floating: Bool) {
+        guard floating else { arrow.removeAnimation(forKey:"float"); return }
+        guard arrow.animation(forKey:"float") == nil else { return }
+        let motion = CABasicAnimation(keyPath:"transform.translation.y")
+        motion.fromValue = 0
+        motion.toValue = 1.7
+        motion.duration = 1.1
+        motion.autoreverses = true
+        motion.repeatCount = .infinity
+        motion.timingFunction = CAMediaTimingFunction(name:.easeInEaseOut)
+        arrow.add(motion,forKey:"float")
+    }
+
+    func click(reduceMotion: Bool) {
+        let fade = CABasicAnimation(keyPath:"opacity")
+        fade.fromValue = 0.75
+        fade.toValue = 0
+        let group = CAAnimationGroup()
+        group.animations = [fade]
+        if !reduceMotion {
+            let scale = CABasicAnimation(keyPath:"transform.scale")
+            scale.fromValue = 0.4
+            scale.toValue = 1
+            group.animations = [fade,scale]
+        }
+        group.duration = 0.24
+        for animation in group.animations ?? [] { animation.duration = group.duration }
+        ripple.add(group,forKey:"click")
     }
 }

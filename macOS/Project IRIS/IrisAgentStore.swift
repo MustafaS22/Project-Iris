@@ -12,6 +12,7 @@ struct AgentActionOutcome { var text: String; var files: [ChatFileReference] = [
     @Published private(set) var storageError: String?
     var answer: Answer?
     var execute: (@MainActor (AssistantAction) async throws -> AgentActionOutcome)?
+    var executeComputer: (@MainActor (AgentRun, AssistantAction) async throws -> AgentActionOutcome)?
     var mayExecute: (@MainActor (AssistantAction) -> Bool) = { _ in false }
     var computerAvailable: (@MainActor () -> Bool) = { true }
     var didComplete: (@MainActor (AgentRun) -> Void)?
@@ -134,11 +135,19 @@ struct AgentActionOutcome { var text: String; var files: [ChatFileReference] = [
                         guard run(id)?.approved == true || mayExecute(action) else {
                             update(id) { $0.status = .waiting; $0.phase = "Computer permission changed; review to continue" }; return
                         }
-                        guard let execute else { throw IrisFailure.message("Computer tools are unavailable.") }
                         computerBusy = true
                         update(id) { $0.phase = action.displayName; $0.events.append(.init(text: action.displayName)) }
                         let outcome: AgentActionOutcome
-                        do { outcome = try await execute(action); computerBusy = false }
+                        do {
+                            if action.type == "computerTask" {
+                                guard let executeComputer, let run = run(id) else { throw IrisFailure.message("Computer tasks are unavailable.") }
+                                outcome = try await executeComputer(run, action)
+                            } else {
+                                guard let execute else { throw IrisFailure.message("Computer tools are unavailable.") }
+                                outcome = try await execute(action)
+                            }
+                            computerBusy = false
+                        }
                         catch { computerBusy = false; throw error }
                         // Keep factual receipts even if Stop was pressed while a tool was completing.
                         update(id) { run in

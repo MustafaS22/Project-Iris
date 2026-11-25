@@ -99,6 +99,31 @@ final class AgentPolicyTests: XCTestCase {
         XCTAssertEqual(s.run(id)?.partial, ""); XCTAssertEqual(s.run(id)?.result, "")
         s.shutdown()
     }
+    func testAutonomousDelegationUsesComputerExecutorAndOriginalAssignment() async throws {
+        let s = store()
+        let objective = "Read the visible test document"
+        var executed = 0
+        var run = job(objective)
+        run.pending = [.init(type:"computerTask",target:"Inspect the current document")]
+        s.mayExecute = { $0.type == "computerTask" }
+        s.execute = { _ in XCTFail("A delegated computer task bypassed its executor"); return .init(text:"") }
+        s.executeComputer = { assignment, action in
+            XCTAssertEqual(assignment.task, objective)
+            XCTAssertEqual(action.target, "Inspect the current document")
+            executed += 1
+            return .init(text:"Observed Test Document")
+        }
+        s.answer = { assignment, _ in
+            XCTAssertTrue(assignment.transcript.contains { $0.text.contains("Observed Test Document") })
+            return "The document is titled Test Document."
+        }
+        let id = try s.deploy(run)
+        await until { s.run(id)?.status == .completed }
+        XCTAssertEqual(executed, 1)
+        XCTAssertEqual(s.run(id)?.actionCount, 1)
+        s.shutdown()
+    }
+
     func testUnsupportedActionsNeverExecute() async throws {
         let s = store(); var calls = 0
         s.answer = { _, _ in "```iris-actions\n{\"actions\":[{\"type\":\"readFile\",\"folder\":\"x\",\"path\":\"secret.txt\"}]}\n```" }

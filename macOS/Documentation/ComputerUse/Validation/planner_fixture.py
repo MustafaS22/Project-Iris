@@ -6,6 +6,12 @@ class Handler(BaseHTTPRequestHandler):
   obj=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))))
   system=obj['messages'][0]['content'];goal=obj['messages'][-1]['content']
   if 'stop validation' in goal: time.sleep(5);decision={'done':True,'summary':'Stopped fixture'}
+  elif 'Read the validation input label' in goal:
+   history=system.split('RECENT ACTIONS:')[-1]
+   if 'native/get_accessibility_tree:' in history and 'Validation input' in system:
+    decision={'answer':'The input is labelled Validation input.'}
+   else:
+    decision={'tool':'get_accessibility_tree','arguments':{},'reason':'Inspect the actual validation editor'}
   else:
    folder=re.search(r'Computer test=([^,\n]+)',system).group(1).strip()
    path=re.search(r'file (loop-[^ ]+\.txt)',goal).group(1)
