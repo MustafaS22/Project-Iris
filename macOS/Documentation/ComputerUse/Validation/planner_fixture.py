@@ -6,6 +6,16 @@ class Handler(BaseHTTPRequestHandler):
   obj=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))))
   system=obj['messages'][0]['content'];goal=obj['messages'][-1]['content']
   if 'stop validation' in goal: time.sleep(5);decision={'done':True,'summary':'Stopped fixture'}
+  elif 'Validate scoped approvals' in goal:
+   history=system.split('RECENT ACTIONS:')[-1]
+   if 'native/focus_window:' not in history:
+    decision={'tool':'focus_window','arguments':{'bundle_id':'com.arize.iris.computer-fixture'},'reason':'Focus the disposable test window'}
+   elif 'native/press_key:' not in history:
+    decision={'tool':'press_key','arguments':{'key':'tab'},'reason':'Move between fields in the disposable window'}
+   elif 'native/get_accessibility_tree:' not in history:
+    decision={'tool':'get_accessibility_tree','arguments':{},'reason':'Verify the focused test interface'}
+   else:
+    decision={'answer':'Finished permission validation.'}
   elif 'Read the validation input label' in goal:
    history=system.split('RECENT ACTIONS:')[-1]
    if 'native/get_accessibility_tree:' in history and 'Validation input' in system:

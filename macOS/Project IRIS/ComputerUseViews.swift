@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 import UniformTypeIdentifiers
 
 struct ComputerActivityView: View {
@@ -35,12 +36,12 @@ struct ComputerActivityView: View {
                         Text("If macOS requires a restart, restart Iris and retry this task.").font(.caption).foregroundStyle(IrisDesign.secondary)
                     }
                 }
-                if session.awaitingApproval {
+                if let request = session.pendingReview {
                     Divider()
-                    Text("Review this action").font(.subheadline.weight(.semibold))
-                    ScrollView { Text(session.proposedAction).font(.system(size:12,design:.monospaced)).textSelection(.enabled).fixedSize(horizontal:false,vertical:true).frame(maxWidth:.infinity,alignment:.leading) }.frame(maxHeight:180)
-                    Text("Approve only if the target, text and effect match your request. Sending, payments, deletion, installation and sharing always need review.").font(.caption).foregroundStyle(IrisDesign.secondary)
-                    HStack { Button("Allow once") { session.approve(true) }.buttonStyle(IrisActionStyle(primary:true)); Button("Deny & stop") { session.approve(false) }.buttonStyle(IrisActionStyle()) }
+                    Text("Waiting for approval").font(.subheadline.weight(.semibold))
+                    Text(request.reason).font(.caption)
+                    Button("Show permission request") { session.revealPermission() }
+                        .buttonStyle(IrisActionStyle(primary: true))
                 }
                 DisclosureGroup("Action history",isExpanded:$history) {
                     ForEach(session.history.suffix(12)) { item in HStack(alignment:.top) { Image(systemName:item.succeeded ? "checkmark.circle" : "exclamationmark.circle").foregroundStyle(item.succeeded ? accent : .orange); VStack(alignment:.leading) { Text(item.detail); Text(item.tool).foregroundStyle(IrisDesign.secondary) } }.font(.caption).padding(.vertical,3) }
@@ -58,9 +59,20 @@ struct ComputerAutonomySettings: View {
         VStack(alignment:.leading,spacing:16) {
             Text("Computer use").font(.headline)
             IrisPicker("Execution mode",selection:$session.policy.mode,options:ComputerMode.allCases.map{.init(value:$0,title:$0.rawValue)})
-            Text("Observe inspects without acting. Assist reviews task startup. Autonomous starts explicit @computer requests and agents’ delegated computer tasks automatically. Recognized routine navigation and local editing can proceed once a task starts. Ambiguous targets, consequential actions, file changes and external tools require review. Excluded apps and individual tool permissions always apply.").font(.callout).foregroundStyle(IrisDesign.secondary)
+            Text("Observe inspects without acting. Assist reviews task startup. Autonomous starts explicit @computer requests and agents’ delegated computer tasks automatically. Assist lets you grant routine actions for one task or remember the category. Autonomous handles recognized routine actions automatically. Ambiguous targets, consequential actions, file changes and external tools require review. Excluded apps and individual tool permissions always apply.").font(.callout).foregroundStyle(IrisDesign.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Remembered approvals").font(.subheadline.weight(.semibold))
+                Text("Applies to recognized routine actions in Assist mode. Sensitive actions still need individual approval.")
+                    .font(.caption).foregroundStyle(IrisDesign.secondary)
+                ForEach(ComputerApprovalCategory.allCases, id: \.self) { category in
+                    Toggle(category.title, isOn: Binding(
+                        get: { session.policy.rememberedApprovals?.contains(category) ?? false },
+                        set: { session.policy.remember(category, allowed: $0) }
+                    )).toggleStyle(.switch)
+                }
+            }
             Toggle("Allow task screenshots to be shared with my AI",isOn:$session.policy.shareScreen).toggleStyle(.switch)
-            Text("Off by default. Images are captured at task start and after meaningful native actions, kept in memory, and removed when it stops. Password controls and excluded apps are blocked when detectable. AX labels, OCR and approved file text can also be sent to your selected AI. Escape stops the task; manual clicks, typing and scrolling invalidate pending actions and trigger a fresh observation after you finish. Mouse movement alone does not interrupt Iris.").font(.caption).foregroundStyle(IrisDesign.secondary)
+            Text("Off by default. Images can be captured at task start or when the interface needs visual inspection. Iris holds them in memory until the task ends. Password controls and excluded apps are blocked when detectable. AX labels, OCR and approved file text can also be sent to your selected AI. Escape stops the task; manual clicks, typing and scrolling invalidate pending actions and trigger a fresh observation after you finish. Mouse movement alone does not interrupt Iris.").font(.caption).foregroundStyle(IrisDesign.secondary)
             Button("Exclude an application…") {
                 let panel = NSOpenPanel(); panel.allowedContentTypes = [.applicationBundle]; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false; panel.directoryURL = URL(fileURLWithPath:"/Applications"); panel.prompt = "Exclude app"
                 if panel.runModal() == .OK, let url = panel.url, let identifier = Bundle(url:url)?.bundleIdentifier, !session.policy.excludedApps.contains(identifier) { session.policy.excludedApps.append(identifier) }
@@ -168,5 +180,179 @@ struct MCPSettingsView: View {
                 Button("Cancel",role:.cancel) { trusted = nil }
             }
         } message: { Text(trusted?.command != nil ? "This executable runs outside Iris with your account’s access. Tool review cannot sandbox the server itself. Continue only if you trust its publisher and arguments." : "This service can receive the arguments you approve. Its tool results are untrusted; credentials stay in Keychain.") }
+    }
+}
+
+enum ComputerUsePresentation: Equatable {
+    case idle, executing, waiting, paused, completed, error
+
+    var intensity: Double {
+        switch self {
+        case .idle: 0
+        case .executing: 0.58
+        case .waiting: 0.8
+        case .paused: 0.24
+        case .completed: 0.9
+        case .error: 0.68
+        }
+    }
+
+    var pulses: Bool { self == .executing || self == .waiting }
+}
+
+struct ComputerActionReview: Identifiable {
+    let id = UUID()
+    let action: String
+    let reason: String
+    let application: String
+    let detail: String
+    let category: ComputerApprovalCategory?
+}
+
+@MainActor final class ComputerPermissionPanel {
+    private var window: NSPanel?
+    private let theme = Theme()
+    private var visibility = UUID()
+
+    @MainActor private final class Theme: ObservableObject {
+        @Published var accent = Color.accentColor
+    }
+
+    #if DEBUG
+    var isVisible: Bool { window?.isVisible ?? false }
+    #endif
+
+    func updateAccent(_ accent: Color) { theme.accent = accent }
+
+    func show(session: ComputerUseSession, accent: Color) {
+        updateAccent(accent)
+        let pointer = NSEvent.mouseLocation
+        let target = NSWorkspace.shared.frontmostApplication
+        let appName = session.pendingReview?.application ?? target?.localizedName ?? "macOS"
+        let panel: NSPanel
+        if let window { panel = window }
+        else {
+            panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = true
+            panel.hidesOnDeactivate = false
+            panel.becomesKeyOnlyIfNeeded = true
+            panel.isReleasedWhenClosed = false
+            panel.level = .statusBar
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+            window = panel
+        }
+        visibility = UUID()
+        let view = PermissionHostingView(rootView: Card(session: session, theme: theme, appName: appName))
+        panel.contentView = view
+        let size = view.fittingSize
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) ?? NSScreen.main {
+            let area = screen.visibleFrame
+            panel.setFrame(NSRect(x: area.maxX - size.width - 22, y: area.maxY - size.height - 20, width: size.width, height: size.height), display: true)
+        } else { panel.setContentSize(size) }
+        panel.ignoresMouseEvents = false
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+    }
+
+    func hide() {
+        guard let panel = window, panel.isVisible else { return }
+        panel.ignoresMouseEvents = true
+        if IrisMotion.reduced { panel.orderOut(nil); panel.contentView = nil; return }
+        let token = UUID()
+        visibility = token
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.16
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self, weak panel] in
+            Task { @MainActor in
+                guard self?.visibility == token else { return }
+                panel?.orderOut(nil)
+                panel?.contentView = nil
+            }
+        })
+    }
+
+    private final class PermissionHostingView: NSHostingView<Card> {
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    }
+
+    private struct Card: View {
+        @ObservedObject var session: ComputerUseSession
+        @ObservedObject var theme: Theme
+        let appName: String
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    IrisAvatar(state: .permission, color: theme.accent, size: 25, animated: true, desktop: true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Iris needs your attention").font(.headline)
+                        Text(appName).font(.caption.weight(.medium)).foregroundStyle(theme.accent).lineLimit(1)
+                    }
+                }
+                if let request = session.pendingReview {
+                    Text(request.reason).font(.callout).lineLimit(3)
+                    ScrollView {
+                        Text(request.detail).font(.system(.caption, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 52)
+                    .foregroundStyle(.secondary)
+                    HStack {
+                        Button("Deny") { session.resolve(.deny, requestID: request.id) }
+                        Spacer()
+                        Button("Allow Once") { session.resolve(.once, requestID: request.id) }
+                            .buttonStyle(.borderedProminent).tint(theme.accent)
+                    }
+                    if let category = request.category {
+                        Divider()
+                        Text(category.title).font(.caption).foregroundStyle(.secondary)
+                        HStack {
+                            Button("Allow All for This Task") { session.resolve(.task, requestID: request.id) }
+                            Spacer()
+                            Button("Always Allow") { session.resolve(.always, requestID: request.id) }
+                                .help("Remember permission for " + category.title.lowercased())
+                        }.controlSize(.small)
+                    }
+                } else if let permission = session.requiredPermission {
+                    Text("Iris needs macOS \(permission.rawValue) access to continue.").font(.callout)
+                    HStack {
+                        Button("Stop") { session.stop() }
+                        Spacer()
+                        Button("Open Settings") { permission.openRequest() }
+                            .buttonStyle(.borderedProminent).tint(theme.accent)
+                    }
+                }
+            }
+            .padding(16).frame(width: 360)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(theme.accent.opacity(0.25)))
+            .preferredColorScheme(.dark)
+        }
+    }
+}
+
+struct ComputerAvatarGlow: ViewModifier {
+    let phase: ComputerUsePresentation
+    let accent: Color
+    @Environment(\.irisReduceMotion) private var reducedMotion
+    @AppStorage("IrisReduceMotion") private var appReduceMotion = false
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                TimelineView(.animation(minimumInterval: 1.0 / 15, paused: reducedMotion || appReduceMotion || !phase.pulses)) { context in
+                    let color = phase == .error ? Color.orange : accent
+                    let pulse = reducedMotion || appReduceMotion || !phase.pulses ? 0.8 : 0.78 + 0.16 * sin(context.date.timeIntervalSinceReferenceDate * (phase == .waiting ? 3 : 2))
+                    Ellipse()
+                        .fill(.radialGradient(colors: [color.opacity(0.7), color.opacity(0.25), .clear], center: .center, startRadius: 2, endRadius: 55))
+                        .padding(-11)
+                        .opacity(phase.intensity * pulse)
+                }
+                .allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .animation(reducedMotion || appReduceMotion ? nil : .easeInOut(duration: 0.25), value: phase)
     }
 }

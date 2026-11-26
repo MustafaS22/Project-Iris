@@ -12,7 +12,31 @@ final class ComputerUsePolicyTests: XCTestCase {
         XCTAssertFalse(p.permitsRoutineAction("click",role:"",label:"",bundle:"com.apple.Safari"))
         XCTAssertFalse(p.permitsRoutineAction("type_text",role:"AXTextField",label:"Reply",bundle:"com.apple.Safari"))
         XCTAssertFalse(p.permitsRoutineAction("press_key",role:"",label:"",bundle:"com.apple.Safari",key:"return"))
+        XCTAssertFalse(p.permitsRoutineAction("press_key",role:"",label:"",bundle:"com.apple.Safari",key:"tab",modifiers:["command"]))
     }
+    func testScopedApprovalAndRevocation() throws {
+        var policy = ComputerUsePolicy()
+        XCTAssertTrue(policy.requiresReview("scroll", external: false, routine: true, category: .navigation, taskApproved: false))
+        XCTAssertFalse(policy.requiresReview("scroll", external: false, routine: true, category: .navigation, taskApproved: true))
+        policy.remember(.navigation, allowed: true)
+        policy = try JSONDecoder().decode(ComputerUsePolicy.self, from: JSONEncoder().encode(policy))
+        XCTAssertFalse(policy.requiresReview("scroll", external: false, routine: true, category: .navigation, taskApproved: false))
+        XCTAssertTrue(policy.requiresReview("type_text", external: false, routine: true, category: .localDrafting, taskApproved: false))
+        XCTAssertTrue(policy.requiresReview("press_key", external: false, routine: false, category: .navigation, taskApproved: true))
+        XCTAssertTrue(policy.requiresReview("scroll", external: true, routine: true, category: .navigation, taskApproved: true))
+        policy.remember(.navigation, allowed: false)
+        XCTAssertTrue(policy.requiresReview("scroll", external: false, routine: true, category: .navigation, taskApproved: false))
+        policy.mode = .autonomous
+        XCTAssertFalse(policy.requiresReview("scroll", external: false, routine: true, category: .navigation, taskApproved: false))
+    }
+
+    func testLegacyPolicyHasNoRememberedApprovals() throws {
+        let data = Data(#"{"mode":"Assist","excludedApps":[],"deniedTools":["scroll"],"shareScreen":false}"#.utf8)
+        let policy = try JSONDecoder().decode(ComputerUsePolicy.self, from: data)
+        XCTAssertNil(policy.rememberedApprovals)
+        XCTAssertFalse(policy.permitsTool("scroll", server: "native"))
+    }
+
     func testSyntheticEventIdentityAndPhysicalInput() {
         XCTAssertTrue(ComputerUsePolicy.isSyntheticInput(marker:0x49524953,sourcePID:999,ownPID:100))
         XCTAssertTrue(ComputerUsePolicy.isSyntheticInput(marker:0,sourcePID:100,ownPID:100))

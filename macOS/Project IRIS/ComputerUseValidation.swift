@@ -12,14 +12,23 @@ import MCP
         func require(_ condition:Bool,_ message:String) throws { if !condition { throw IrisFailure.message(message) } }
         do {
             try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+            if ProcessInfo.processInfo.arguments.contains("--iris-approval-validation") {
+                try await validateApprovalPanel(iris)
+                record("approval-panel", "PASS: nonactivating panel above an external app with no Iris main window, stale response blocked, task grant skips the next routine request, always persisted, deny stopped without acting")
+                NSApp.terminate(nil)
+                return
+            }
             if ProcessInfo.processInfo.arguments.contains("--iris-real-app-validation") { await ComputerRealAppValidation.run(record:record,directory:directory) }
             let native = NativeComputerUse(); native.policy.mode = .observe
             let displays = try await native.execute("get_displays",[:]); try require(!displays.text.isEmpty,"No displays"); record("display-metadata","PASS: real display IDs, points and scaling")
             do { _ = try await native.execute("click",[:]); throw IrisFailure.message("Observe mode allowed click") } catch { try require(error.localizedDescription.contains("blocked"),"Observe failed closed"); record("observe-mode","PASS: blocked pointer action before execution") }
             try? FileManager.default.removeItem(at:URL(fileURLWithPath:"/tmp/IrisComputerValidation/show-dialog.flag"))
             let fixtureURL = URL(fileURLWithPath:"/tmp/IrisComputerFixture.app")
-            _ = try await NSWorkspace.shared.openApplication(at:fixtureURL,configuration:.init())
-            try await Task.sleep(for:.milliseconds(700))
+            let fixture = try await NSWorkspace.shared.openApplication(at: fixtureURL, configuration: .init())
+            try await native.activateAndWait(fixture)
+            if AXIsProcessTrusted() {
+                _ = try await native.execute("wait_for_element", ["query": "Validation input"])
+            }
             native.policy.mode = .assist
             if AXIsProcessTrusted() {
                 let before = try await native.tree(); try require(before.contains("Validation input"),"Fixture input not found in AX tree")
@@ -208,6 +217,66 @@ import MCP
         } catch { record("failure",error.localizedDescription) }
         for app in NSRunningApplication.runningApplications(withBundleIdentifier:"com.arize.iris.computer-fixture") { app.terminate() }
         NSApp.terminate(nil)
+    }
+
+    private static func validateApprovalPanel(_ iris: IrisOrchestrator) async throws {
+        func require(_ result: Bool, _ message: String) throws {
+            guard result else { throw IrisFailure.message(message) }
+        }
+        func wait(until ready: () -> Bool) async throws {
+            for _ in 0..<100 {
+                if ready() { return }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            throw IrisFailure.message("Timed out waiting for the approval fixture.")
+        }
+        let fixture = try await NSWorkspace.shared.openApplication(
+            at: URL(fileURLWithPath: "/tmp/IrisComputerFixture.app"), configuration: .init()
+        )
+        defer { fixture.terminate() }
+        try await wait { NSWorkspace.shared.frontmostApplication?.processIdentifier == fixture.processIdentifier }
+        let session = ComputerUseSession()
+        let original = session.policy
+        defer { session.shutdown(); session.policy = original }
+        session.policy.mode = .assist
+        session.policy.shareScreen = false
+        session.policy.remember(.navigation, allowed: false)
+        var preferences = Preferences()
+        preferences.source = .local
+        preferences.server = "http://127.0.0.1:5196/v1"
+        preferences.model = "isolated-planner-fixture"
+
+        func start() {
+            session.start("Validate scoped approvals", preferences: preferences, files: iris.actions) { _ in }
+        }
+        start()
+        try await wait { session.pendingReview != nil || !session.running }
+        guard let request = session.pendingReview else { throw IrisFailure.message(session.completion ?? session.phase) }
+        try require(request.category == .navigation && session.permissionPanelVisible, "Missing scoped approval panel")
+        try require(NSApp.keyWindow == nil && NSWorkspace.shared.frontmostApplication?.processIdentifier == fixture.processIdentifier, "Permission panel activated Iris")
+        session.resolve(.once, requestID: UUID())
+        try require(session.pendingReview?.id == request.id, "Stale response approved the current request")
+        session.resolve(.task, requestID: request.id)
+        try await wait { session.pendingReview != nil || !session.running }
+        try require(session.phase == "Finished", session.completion ?? "Task scope failed: " + session.phase)
+        try require(session.history.filter(\.succeeded).contains { $0.tool == "native/press_key" }, "Second routine action was not executed")
+        try await wait { !session.permissionPanelVisible }
+        try require(session.policy.rememberedApprovals?.isEmpty != false, "Temporary approval was persisted")
+
+        start()
+        try await wait { session.pendingReview != nil || !session.running }
+        guard let next = session.pendingReview else { throw IrisFailure.message("The next task inherited a temporary grant.") }
+        session.resolve(.always, requestID: next.id)
+        try await wait { !session.running }
+        try require(ComputerUseSession().policy.rememberedApprovals?.contains(.navigation) == true, "Remembered grant was not reloaded")
+        session.policy.remember(.navigation, allowed: false)
+
+        start()
+        try await wait { session.pendingReview != nil || !session.running }
+        guard let denied = session.pendingReview else { throw IrisFailure.message("Revoked category was still approved.") }
+        session.resolve(.deny, requestID: denied.id)
+        try await wait { !session.running }
+        try require(session.history.isEmpty && session.completion?.contains("Action denied") == true, "Deny executed a pending action")
     }
 }
 #endif

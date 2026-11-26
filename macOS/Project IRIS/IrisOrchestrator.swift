@@ -165,7 +165,7 @@ final class IrisOrchestrator: ObservableObject {
     var preferences: Preferences { data.preferences }
     var state: IrisState {
         if error != nil { return .error }
-        if computer.running { return computer.awaitingApproval ? .permission : .thinking }
+        if computer.running { return computer.needsAttention ? .permission : (computer.paused ? .idle : .thinking) }
         if welcome.active, welcome.celebrating { return .celebration }
         if voice.listening { return .listening }; if voice.speaking { return .answering }
         if voice.requesting { return .permission }; if contextBusy { return .vision }
@@ -184,7 +184,7 @@ final class IrisOrchestrator: ObservableObject {
         if notice != nil { items.append(.init(id: "complete", kind: .reminder, title: "Session saved", symbol: "checkmark", expiresAt: nil)) }
         return ActivityRouter.ranked(items, at: now)
     }
-    func setPreference(_ change: (inout Preferences) -> Void) { change(&data.preferences); actions.preferredBrowser = preferences.preferredBrowser; save() }
+    func setPreference(_ change: (inout Preferences) -> Void) { let previousAccent = accent; change(&data.preferences); if previousAccent != accent { computer.approvalAccent = accent }; actions.preferredBrowser = preferences.preferredBrowser; save() }
     func providerChanged() {
         data.preferences.providerVerified = false; connectionResult = "Connecting automatically…"; availableModels = []; save(); refreshConnection()
     }

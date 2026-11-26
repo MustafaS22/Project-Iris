@@ -36,11 +36,11 @@ import QuartzCore
             panel.setFrameOrigin(destination)
             panel.orderFrontRegardless()
         } else {
-            await NSAnimationContext.runAnimationGroup { context in
+            NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.18
                 context.timingFunction = CAMediaTimingFunction(name:.easeInEaseOut)
                 panel.animator().setFrameOrigin(destination)
-            }
+            }, completionHandler: nil)
         }
         try Task.checkCancellation()
         if active { drawing.setFloating(!reducesMotion) }

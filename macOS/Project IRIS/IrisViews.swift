@@ -68,13 +68,14 @@ struct NotchSurface: View {
         HStack(spacing: 0) {
             // Keep one live avatar mounted so expansion preserves blink and cursor-gaze continuity.
             Button {
-                if iris.floatingActive { iris.returnToNotch?() }
+                if iris.computer.needsAttention { iris.computer.revealPermission() } else if iris.floatingActive { iris.returnToNotch?() }
                 else { iris.togglePresence() }
             } label: {
                 IrisAvatar(state: iris.state, color: iris.accent, size: 30, animated: true)
+                    .modifier(ComputerAvatarGlow(phase: iris.computer.presentation, accent: iris.accent))
                     .frame(width: 48, height: notchHeight + 5)
             }.buttonStyle(.plain)
-                .help(iris.expanded ? "Collapse Iris" : "Open Iris · \(iris.shortcuts.label(.notch))")
+                .help(iris.computer.needsAttention ? "Show permission request" : iris.expanded ? "Collapse Iris" : "Open Iris · \(iris.shortcuts.label(.notch))")
             if iris.expanded {
                 HStack(spacing: 2) {
                     mode(.focus, "house", "Home and focus")

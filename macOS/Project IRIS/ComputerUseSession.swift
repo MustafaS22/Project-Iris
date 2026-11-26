@@ -64,7 +64,22 @@ enum ComputerPermission: String {
     }()
     let native = NativeComputerUse()
     let mcp = IrisMCPManager()
-    @Published var policy = ComputerUsePolicy() { didSet { native.policy = policy; if running { interactionRevision += 1; native.discardObservation(); if policy.mode != oldValue.mode || policy.excludedApps != oldValue.excludedApps || policy.deniedTools != oldValue.deniedTools { pause() } }; UserDefaults.standard.set(try? JSONEncoder().encode(policy),forKey:policyKey) } }
+    @Published var policy = ComputerUsePolicy() {
+        didSet {
+            native.policy = policy
+            let changedActionPolicy = policy.mode != oldValue.mode || policy.excludedApps != oldValue.excludedApps ||
+                policy.deniedTools != oldValue.deniedTools
+            if running, changedActionPolicy || policy.shareScreen != oldValue.shareScreen {
+                interactionRevision += 1
+                native.discardObservation()
+                if changedActionPolicy {
+                    taskApproved = false
+                    pause()
+                }
+            }
+            UserDefaults.standard.set(try? JSONEncoder().encode(policy), forKey: policyKey)
+        }
+    }
     @Published var objective = ""
     @Published private(set) var delegated = false
     @Published var controlledApplication = ""
@@ -72,7 +87,39 @@ enum ComputerPermission: String {
     @Published var running = false
     @Published var paused = false
     @Published var awaitingApproval = false
-    @Published var proposedAction = ""
+    @Published private(set) var pendingReview: ComputerActionReview?
+    @Published private(set) var feedback: ComputerUsePresentation = .idle
+    var approvalAccent = Color.accentColor {
+        didSet { native.cursor.accent = NSColor(approvalAccent); permissionPanel.updateAccent(approvalAccent) }
+    }
+    private lazy var permissionPanel = ComputerPermissionPanel()
+    private var taskApproved = false
+    private var feedbackReset: Task<Void, Never>?
+    var proposedAction: String { pendingReview?.detail ?? "" }
+    var needsAttention: Bool { awaitingApproval || requiredPermission != nil }
+    var presentation: ComputerUsePresentation {
+        if needsAttention { return .waiting }
+        if running { return paused ? .paused : .executing }
+        return feedback
+    }
+
+    func revealPermission() {
+        guard needsAttention else { return }
+        permissionPanel.show(session: self, accent: approvalAccent)
+    }
+
+    #if DEBUG
+    var permissionPanelVisible: Bool { permissionPanel.isVisible }
+    #endif
+
+    private func finishFeedback(_ state: ComputerUsePresentation) {
+        feedbackReset?.cancel()
+        feedback = state
+        feedbackReset = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            self?.feedback = .idle
+        }
+    }
     @Published private(set) var requiredPermission: ComputerPermission?
     @Published var history: [ComputerHistoryEntry] = []
     @Published var completion: String?
@@ -101,11 +148,32 @@ enum ComputerPermission: String {
     func clearHistory() { guard !running else { return }; history = []; objective = ""; phase = "Ready"; try? FileManager.default.removeItem(at:historyURL) }
     func stop() {
         generation = UUID(); worker?.cancel(); worker = nil; deadline?.cancel(); deadline = nil
-        approve(false); requiredPermission = nil; running = false; paused = false; phase = "Stopped"; native.cursor.hide(); native.discardObservation(); removeMonitors(); persist()
+        approve(false); requiredPermission = nil; permissionPanel.hide(); taskApproved = false; running = false; finishFeedback(.idle); paused = false; phase = "Stopped"; native.cursor.hide(); native.discardObservation(); removeMonitors(); persist()
     }
-    func pause() { interactionRevision += 1; paused = true; phase = "Paused · resume when the interface is ready" }
-    func resume() { interactionRevision += 1; native.discardObservation(); paused = false; phase = "Inspecting the updated interface" }
-    func approve(_ allowed: Bool) { let continuation = approval; approval = nil; awaitingApproval = false; continuation?.resume(returning:allowed) }
+    func pause() { interactionRevision += 1; paused = true; native.cursor.hide(); phase = "Paused · resume when the interface is ready" }
+    func resume() { interactionRevision += 1; native.discardObservation(); paused = false; if !needsAttention { native.cursor.show() }; phase = "Inspecting the updated interface" }
+    func approve(_ allowed: Bool) {
+        guard let review = pendingReview else { return }
+        resolve(allowed ? .once : .deny, requestID: review.id)
+    }
+
+    func resolve(_ decision: ComputerApprovalDecision, requestID: UUID) {
+        guard let request = pendingReview, request.id == requestID, let continuation = approval else { return }
+        switch decision {
+        case .task, .always:
+            guard let category = request.category else { return }
+            if decision == .task { taskApproved = true }
+            else { policy.remember(category, allowed: true) }
+        case .once, .deny:
+            break
+        }
+        approval = nil
+        pendingReview = nil
+        awaitingApproval = false
+        permissionPanel.hide()
+        if !paused, decision != .deny { native.cursor.show() }
+        continuation.resume(returning: decision != .deny)
+    }
     private func checkpoint(_ id: UUID) async throws {
         try Task.checkCancellation(); guard id == generation else { throw CancellationError() }
         while paused || Date() < quietUntil { try await Task.sleep(for:.milliseconds(100)); try Task.checkCancellation(); guard id == generation else { throw CancellationError() } }
@@ -114,7 +182,15 @@ enum ComputerPermission: String {
         requiredPermission = permission
         phase = "Waiting for " + permission.rawValue
         persist()
-        defer { if generation == taskID { requiredPermission = nil } }
+        native.cursor.hide()
+        revealPermission()
+        defer {
+            if generation == taskID {
+                requiredPermission = nil
+                permissionPanel.hide()
+                if !paused { native.cursor.show() }
+            }
+        }
         while !permission.granted {
             try await Task.sleep(for:.milliseconds(450))
             try await checkpoint(taskID)
@@ -125,9 +201,15 @@ enum ComputerPermission: String {
         interactionRevision += 1
     }
 
-    private func review(_ label: String) async throws {
-        proposedAction = label; awaitingApproval = true; phase = "Waiting for your approval"
-        let allowed = await withCheckedContinuation { approval = $0 }
+    private func review(_ request: ComputerActionReview) async throws {
+        let allowed = await withCheckedContinuation { continuation in
+            approval = continuation
+            pendingReview = request
+            awaitingApproval = true
+            phase = "Waiting for your approval"
+            native.cursor.hide()
+            revealPermission()
+        }
         guard allowed else { throw IrisFailure.message("Action denied. Task stopped; nothing else was executed.") }
     }
     private func installMonitors() {
@@ -138,10 +220,9 @@ enum ComputerPermission: String {
             Task { @MainActor in
                 guard let self, self.running else { return }
                 if escape { self.stop(); return }
-                guard !self.awaitingApproval else { return }
                 self.interactionRevision += 1
                 self.quietUntil = Date().addingTimeInterval(0.8)
-                self.phase = "Waiting for your interaction to finish"
+                if !self.needsAttention && !self.paused { self.phase = "Waiting for your interaction to finish" }
             }
         }
 
@@ -184,11 +265,12 @@ enum ComputerPermission: String {
     func start(_ task: String, preferences: Preferences, files: AssistantActions, agentStep: String? = nil, accent: Color? = nil, onFinish: @escaping (String)->Void) {
         guard !running, !task.isEmpty else { return }
         generation = UUID(); let id = generation
+        taskApproved = false; finishFeedback(.idle)
         delegated = agentStep != nil
         objective = task; history = []; completion = nil; running = true; paused = false; phase = "Inspecting the current app"; taskDeadline = Date().addingTimeInterval(300)
         let startingApp = ScreenGuidance.currentApp
         native.policy = policy
-        native.cursor.accent = NSColor(accent ?? preferences.theme.color(customHue:preferences.customHue ?? 0.5))
+        approvalAccent = accent ?? preferences.theme.color(customHue:preferences.customHue ?? 0.5)
         native.cursor.show()
         native.validateInput = { [weak self] in
             guard let self, self.running, !self.paused, self.generation == id else { throw CancellationError() }
@@ -209,6 +291,7 @@ enum ComputerPermission: String {
                 let message = "Computer task timed out while: " + self.phase
                 self.stop()
                 self.phase = "Timed out"
+                self.finishFeedback(.error)
                 self.completion = message
                 self.persist()
                 onFinish(message)
@@ -217,7 +300,30 @@ enum ComputerPermission: String {
         }
         worker = Task { [weak self] in
             guard let self else { return }
-            defer { if self.generation == id { self.requiredPermission = nil; self.running = false; self.deadline?.cancel(); self.deadline = nil; self.removeMonitors(); self.native.cursor.hide(); self.native.discardObservation(); self.persist() } }
+            let started = ProcessInfo.processInfo.systemUptime
+            let initialReads = self.native.axReads
+            let initialScreenshots = self.native.screenshots
+            let initialOCR = self.native.ocrRuns
+            var plannerRequests = 0
+            var actionLatency = 0.0
+            var actionAttempts = 0
+            defer {
+                let wallTime = ProcessInfo.processInfo.systemUptime - started
+                let actionMean = actionAttempts == 0 ? 0 : actionLatency / Double(actionAttempts)
+                Self.log.info("Task metrics wall=\(wallTime, privacy: .public)s meanTool=\(actionMean, privacy: .public)s attempts=\(actionAttempts, privacy: .public) planner=\(plannerRequests, privacy: .public) ax=\(self.native.axReads - initialReads, privacy: .public) screenshots=\(self.native.screenshots - initialScreenshots, privacy: .public) ocr=\(self.native.ocrRuns - initialOCR, privacy: .public)")
+                if self.generation == id {
+                    self.requiredPermission = nil
+                    self.permissionPanel.hide()
+                    self.taskApproved = false
+                    self.running = false
+                    self.deadline?.cancel()
+                    self.deadline = nil
+                    self.removeMonitors()
+                    self.native.cursor.hide()
+                    self.native.discardObservation()
+                    self.persist()
+                }
+            }
             do {
                 Self.log.info("Computer task started; provider=\(preferences.source.rawValue, privacy:.public)")
                 var bootstrapped = false
@@ -236,7 +342,7 @@ enum ComputerPermission: String {
                     self.persist()
                 }
                 if !bootstrapped && NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Bundle.main.bundleIdentifier, let startingApp, !self.policy.excludedApps.contains(startingApp.bundleIdentifier ?? "") {
-                    startingApp.activate(); try await Task.sleep(for:.milliseconds(180))
+                    try await self.native.activateAndWait(startingApp)
                 }
                 self.phase = "Checking the AI provider"
                 var ready = preferences
@@ -269,11 +375,14 @@ enum ComputerPermission: String {
                 for step in 0..<48 {
                     try await self.checkpoint(id)
                     if lastObservedRevision != self.interactionRevision {
+                        let revision = self.interactionRevision
+                        self.native.discardObservation()
                         verifiedObservation = false
                         inspected = false
                         if let fresh = try? await self.native.observe(includeImage:self.policy.shareScreen) { observation = fresh.text; image = fresh.image; inspected = true }
                         else { observation = await self.environment(); image = nil }
-                        lastObservedRevision = self.interactionRevision
+                        lastObservedRevision = revision
+                        if revision != self.interactionRevision { continue }
                     }
                     let observedRevision = self.interactionRevision
                     self.phase = "Waiting for \(ready.source.rawValue) to choose an action · \(actions)/24"
@@ -282,6 +391,7 @@ enum ComputerPermission: String {
                     let messages = [ChatMessage(role:"user",text:task)]
                     let raw: String
                     do {
+                        plannerRequests += 1
                         Self.log.info("Planner request step=\(step) image=\(image != nil)")
                         if ready.source == .local { raw = try await ModelService.answer(server:ready.server,model:ready.model,messages:messages,context:context + delegatedContext,role:ready.role,images:self.policy.shareScreen ? (image.map{[$0]} ?? []) : [],draftInstruction:Self.instruction,outputLimit:1400,session:self.plannerHTTP) }
                         else { raw = try await CloudModelService.answer(source:ready.source,model:ready.model,messages:messages,context:context + delegatedContext,images:self.policy.shareScreen ? (image.map{[$0]} ?? []) : [],draftInstruction:Self.instruction,outputLimit:1400,session:self.plannerHTTP) }
@@ -301,7 +411,10 @@ enum ComputerPermission: String {
                     }
                     Self.log.info("Planner response received step=\(step)")
                     try await self.checkpoint(id)
-                    if self.interactionRevision != observedRevision { verifiedObservation = false; let fresh = try? await self.native.observe(includeImage:self.policy.shareScreen); if let fresh { observation = fresh.text } else { observation = await self.environment() }; image = fresh?.image; result = "The user changed the interface. Replan from the new observation; previous approval and targets are invalid."; continue }
+                    if self.interactionRevision != observedRevision {
+                        result = "The user changed the interface. Replan from the new observation; previous approval and targets are invalid."
+                        continue
+                    }
                     let cleaned = raw.trimmingCharacters(in:.whitespacesAndNewlines).replacingOccurrences(of:"```json",with:"").replacingOccurrences(of:"```",with:"")
                     guard cleaned.utf8.count <= 16000, let decision = try? JSONDecoder().decode(ComputerDecision.self,from:Data(cleaned.utf8)) else {
                         failures += 1; guard failures <= 2 else { throw IrisFailure.message("The selected model did not return a valid tool decision. Use a model that follows structured tool instructions.") }; result = "Invalid JSON decision. Return the documented JSON format only."; continue
@@ -314,7 +427,7 @@ enum ComputerPermission: String {
                             completionFeedback = "Inspect the relevant interface before returning an answer."
                             continue
                         }
-                        self.phase = "Finished"
+                        self.phase = "Finished"; self.finishFeedback(.completed)
                         self.completion = answer
                         onFinish(answer)
                         return
@@ -328,7 +441,7 @@ enum ComputerPermission: String {
                             continue
                         }
                         let summary = decision.summary ?? "Task finished after inspecting the resulting state."
-                        self.phase = "Finished"; self.completion = summary; onFinish(summary); return
+                        self.phase = "Finished"; self.finishFeedback(.completed); self.completion = summary; onFinish(summary); return
                     }
                     completionFeedback = ""
                     guard let name = decision.tool else { throw IrisFailure.message("The model returned no tool.") }
@@ -345,12 +458,23 @@ enum ComputerPermission: String {
                         result = permission.rawValue + " verified. Inspect the target again before acting."
                         continue
                     }
-                    if self.policy.needsApproval(name,external:server != "native") && !(server == "native" && self.native.isRoutine(name,args)) {
-                        try await self.review("\(decision.reason ?? name)\n\(server)/\(name)\n\(serialized)\n\(server == "native" ? self.native.describeTarget(args) : "External MCP tool")\nTarget: \(target?.localizedName ?? "Unknown")")
+                    let routine = server == "native" && self.native.isRoutine(name, args)
+                    let category = routine ? self.native.approvalCategory(name, args) : nil
+                    if self.policy.requiresReview(name, external: server != "native", routine: routine, category: category, taskApproved: self.taskApproved) {
+                        let actualTarget = server == "native" ? self.native.describeTarget(args) : "External MCP tool"
+                        let appName = name == "launch_application" && server == "native"
+                            ? (args["bundle_id"]?.stringValue ?? target?.localizedName ?? "macOS")
+                            : (server == "native" ? (target?.localizedName ?? "macOS") : server)
+                        try await self.review(.init(action: name, reason: decision.reason ?? name,
+                                                    application: appName, detail: "\(server)/\(name)\n\(serialized)\n\(actualTarget)",
+                                                    category: category))
                         try await self.checkpoint(id)
-                        if self.interactionRevision != observedRevision { observation = await self.environment(); result = "Interface changed during review. Replan and request fresh approval."; continue }
-                        if let target, server == "native" { target.activate(); try await Task.sleep(for:.milliseconds(180)) }
-
+                        let foreground = NSWorkspace.shared.frontmostApplication?.processIdentifier
+                        if self.interactionRevision != observedRevision || (server == "native" && foreground != target?.processIdentifier) {
+                            if self.interactionRevision == observedRevision { self.interactionRevision += 1 }
+                            result = "Interface changed during review. Replan the action against the current interface."
+                            continue
+                        }
                     }
                     guard self.policy.permitsTool(name,server:server) else { throw IrisFailure.message("Permissions changed during review. The action was not executed.") }
                     Self.log.info("Executing tool=\(name, privacy:.public) native=\(server == "native")")
@@ -360,9 +484,20 @@ enum ComputerPermission: String {
                     }
                     do {
                         let output: ComputerObservation
-                        if server == "native", name.hasPrefix("file_") { output = try ComputerUseFiles.execute(name,arguments:args,files:files) }
-                        else if server == "native" { output = try await self.native.execute(name,args) }
-                        else { output = try await self.mcp.call(server:server,name:name,arguments:args) }
+                        let actionStarted = ProcessInfo.processInfo.systemUptime
+                        do {
+                            defer {
+                                actionAttempts += 1
+                                actionLatency += ProcessInfo.processInfo.systemUptime - actionStarted
+                            }
+                            if server == "native", name.hasPrefix("file_") {
+                                output = try ComputerUseFiles.execute(name, arguments: args, files: files)
+                            } else if server == "native" {
+                                output = try await self.native.execute(name, args)
+                            } else {
+                                output = try await self.mcp.call(server: server, name: name, arguments: args)
+                            }
+                        }
                         try await self.checkpoint(id)
                         result = output.text; image = self.policy.shareScreen ? output.image : nil
                         if server == "native", ["get_accessibility_tree", "find_ui_element", "wait_for_element", "get_screen", "capture_window"].contains(name) { inspected = true }
@@ -372,8 +507,14 @@ enum ComputerPermission: String {
                             verifiedObservation = ["file_read", "file_list"].contains(name)
                         } else if server == "native" && !ComputerUsePolicy.inspections.contains(name) {
                             verifiedObservation = false
-                            try await Task.sleep(for:.milliseconds(300))
-                            if let fresh = try? await self.native.observe(includeImage:self.policy.shareScreen) {
+                            if ["click", "keyboard_shortcut", "press_key", "scroll", "drag"].contains(name) {
+                                try await Task.sleep(for: .milliseconds(100))
+                            }
+                            // Native semantic actions have a fresh AX observation. Capture again only when
+                            // geometry or visual input was involved; the planner can request a frame explicitly.
+                            let semanticAction = output.text.hasPrefix("Performed AXPress.") ||
+                                output.text.hasPrefix("Inserted text through Accessibility")
+                            if let fresh = try? await self.native.observe(includeImage: self.policy.shareScreen && !semanticAction) {
                                 observation = fresh.text
                                 image = fresh.image
                                 // This is a separate read of the resulting UI, not the mutation response.
@@ -401,7 +542,7 @@ enum ComputerPermission: String {
                     self.persist()
                 }
                 throw IrisFailure.message("Planning limit reached. Review the task before retrying.")
-            } catch { if !Task.isCancelled && self.generation == id { self.phase = "Needs attention"; self.completion = error.localizedDescription; onFinish(error.localizedDescription) } }
+            } catch { if !Task.isCancelled && self.generation == id { self.phase = "Needs attention"; self.finishFeedback(.error); self.completion = error.localizedDescription; onFinish(error.localizedDescription) } }
         }
     }
     func shutdown() { stop(); mcp.shutdown() }

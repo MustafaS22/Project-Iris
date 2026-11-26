@@ -9,6 +9,8 @@ struct AssistantHome: View {
         VStack(spacing: 16) {
             VStack(spacing: 8) {
                 IrisAvatar(state: iris.state, color: iris.accent, size: 68, animated: true, desktop: true, isWriting: iris.busy)
+                    .modifier(ComputerAvatarGlow(phase: iris.computer.presentation, accent: iris.accent))
+                    .onTapGesture { iris.computer.revealPermission() }
                     .frame(width: 88, height: 88)
                 if iris.messages.isEmpty {
                     VStack(spacing: 8) {

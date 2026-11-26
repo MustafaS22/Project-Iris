@@ -155,6 +155,7 @@ final class FloatingIrisController: ObservableObject {
         for window in [panel, controls, composer, canvas] { window.orderOut(nil) }
     }
     func toggleControls() {
+        if iris.computer.needsAttention { iris.computer.revealPermission(); return }
         guard visible, !composing, !morphing else { return }
         flight = nil; movementGaze = nil
         lastInteraction = ProcessInfo.processInfo.systemUptime
@@ -478,6 +479,7 @@ private struct FloatingIrisView: View {
     @ObservedObject var iris: IrisOrchestrator
     var body: some View {
         IrisAvatar(state: iris.state == .sleeping ? .idle : iris.state, color: iris.accent, size: 64, animated: true, desktop: true, isWriting: iris.busy, guidance: controller.gaze, movement: controller.movementGaze)
+            .modifier(ComputerAvatarGlow(phase: iris.computer.presentation, accent: iris.accent))
             .modifier(FloatingAvatarShadow(accent: iris.accent))
             .frame(width: 148, height: 108)
             .overlay(FloatingDragSurface(controller: controller))

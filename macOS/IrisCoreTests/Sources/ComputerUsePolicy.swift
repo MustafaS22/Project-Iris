@@ -2,7 +2,37 @@ import Foundation
 
 /// These decisions are applied outside the model. Tool descriptions never grant access.
 enum ComputerMode: String, Codable, CaseIterable { case observe = "Observe", assist = "Assist", autonomous = "Autonomous" }
+enum ComputerApprovalCategory: String, Codable, CaseIterable {
+    case navigation, localDrafting
+
+    var title: String {
+        switch self {
+        case .navigation: "Routine navigation"
+        case .localDrafting: "Typing in local editors"
+        }
+    }
+}
+
+enum ComputerApprovalDecision { case once, task, always, deny }
+
 struct ComputerUsePolicy: Codable {
+    // Optional for policies saved before approval categories were introduced.
+    var rememberedApprovals: Set<ComputerApprovalCategory>?
+
+    mutating func remember(_ category: ComputerApprovalCategory, allowed: Bool) {
+        var categories = rememberedApprovals ?? []
+        if allowed { categories.insert(category) } else { categories.remove(category) }
+        rememberedApprovals = categories
+    }
+
+    func requiresReview(_ name: String, external: Bool, routine: Bool, category: ComputerApprovalCategory?, taskApproved: Bool) -> Bool {
+        if external { return true }
+        if let category, mode == .assist, routine {
+            return !taskApproved && !(rememberedApprovals?.contains(category) ?? false)
+        }
+        return needsApproval(name, external: false) && !routine
+    }
+
     var mode: ComputerMode = .assist
     var excludedApps: [String] = ["com.apple.keychainaccess", "com.apple.systempreferences", "com.1password.1password", "com.agilebits.onepassword7"]
     var deniedTools: [String] = []
@@ -34,7 +64,7 @@ struct ComputerUsePolicy: Codable {
             if ["AXTextField", "AXTextArea", "AXComboBox", "AXMenuBarItem", "AXTab", "AXRow", "AXOutlineRow"].contains(role) { return true }
             return ["back", "forward", "search", "new note", "new folder", "new document", "file", "edit", "view", "window", "help", "cancel", "close", "next", "previous"].contains(text.trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        if name == "press_key" { return ["escape", "tab", "left", "right", "up", "down", "home", "end", "pageup", "pagedown"].contains(key) }
+        if name == "press_key" { return modifiers.isEmpty && ["escape", "tab", "left", "right", "up", "down", "home", "end", "pageup", "pagedown"].contains(key) }
         if name == "keyboard_shortcut", modifiers == ["command"] { return ["l", "f", "a", "c"].contains(key) || (localEditors.contains(bundle) && ["n", "s", "b", "i"].contains(key)) }
         return false
     }
