@@ -47,3 +47,49 @@ struct IrisNotchBackground: View {
         }.allowsHitTesting(false)
     }
 }
+
+/// Uses the same path as the notch fill and hit region. The even-odd mask removes all interior light.
+struct IrisNotchComputerGlow: View, Animatable {
+    static let margin: CGFloat = 10
+    var shape: IrisNotchShape
+    let phase: ComputerUsePresentation
+    let accent: Color
+    @Environment(\.irisReduceMotion) private var reduceMotion
+
+    var animatableData: IrisNotchShape.AnimatableData {
+        get { shape.animatableData }
+        set { shape.animatableData = newValue }
+    }
+
+    var body: some View {
+        let strength: Double = switch phase {
+        case .executing: 0.82
+        case .waiting: 0.43
+        case .paused: 0.22
+        default: 0
+        }
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || phase != .executing)) { clock in
+            let cycle = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 5.8)
+            let breath = reduceMotion || phase != .executing ? 0.93 : 0.87 + 0.13 * cos(cycle * 2 * .pi / 5.8)
+            Canvas { context, size in
+                let canvas = CGRect(origin: .zero, size: size)
+                let outline = shape.path(in: canvas.insetBy(dx: Self.margin, dy: Self.margin))
+                var exterior = Path(canvas)
+                exterior.addPath(outline)
+                var outside = context
+                outside.clip(to: exterior, style: .init(eoFill: true))
+                outside.drawLayer { diffusion in
+                    diffusion.addFilter(.blur(radius: 3.3))
+                    diffusion.stroke(outline, with: .color(accent.opacity(0.68)), lineWidth: 3.1)
+                }
+                outside.stroke(outline, with: .color(accent), lineWidth: 1.9)
+            }
+            .opacity(breath)
+        }
+        .padding(-Self.margin)
+        .opacity(strength)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.28), value: strength)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}

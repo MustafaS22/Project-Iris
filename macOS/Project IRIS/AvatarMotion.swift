@@ -70,7 +70,7 @@ struct AvatarMotion {
         if !asleep {
             target.floatX = 0.021 * sin(t * 2 * .pi / 7.4) + 0.006 * sin(t * 2 * .pi / 11.3)
             target.floatY = 0.032 * sin(t * 2 * .pi / 5.8) + 0.006 * sin(t * 2 * .pi / 9.7)
-            target.roll = 0.9 * sin(t * 2 * .pi / 8.2)
+            target.roll += 0.9 * sin(t * 2 * .pi / 8.2)
             target.gazeX = 0.012 * sin(t * 0.38)
             target.gazeY = 0.008 * sin(t * 0.29)
             if state == .thinking || state == .vision {
@@ -83,7 +83,21 @@ struct AvatarMotion {
                 target.gazeX = points[index].0 + (points[next].0 - points[index].0) * blend
                 target.gazeY = points[index].1 + (points[next].1 - points[index].1) * blend
             }
-            applyExpression(to: &target, elapsed: max(0, time - transitionStarted))
+            let stateAge = max(0, time - transitionStarted)
+            if state == .permission {
+                // A lifted gaze settles into small, connected glances with long holds.
+                let settle = Self.ease((stateAge - 1.15) / 1.15)
+                let variation = Self.unit(expressionSeed)
+                let step = stateAge / (5.5 + variation * 2.6)
+                let leg = Int(step) % 4
+                let glances = [0.0, 0.05, -0.028, 0.012]
+                let lateral = Self.ease((step - floor(step) - 0.83) / 0.17)
+                target.gazeX = glances[leg] + (glances[(leg + 1) % glances.count] - glances[leg]) * lateral
+                target.gazeY = -0.056 + 0.031 * settle
+                target.floatX *= 0.3
+                target.floatY *= 0.42
+            }
+            applyExpression(to: &target, elapsed: stateAge)
             if state == .answering {
                 let breath = 0.025 * sin(t * 2 * .pi / 2.6)
                 target.leftOpen += breath; target.rightOpen += breath
@@ -176,7 +190,12 @@ struct AvatarMotion {
         case .warning, .disconnected: pose.leftOpen = 0.83; pose.rightOpen = 0.91
         case .attention: pose.leftOpen = 1.05; pose.rightOpen = 1.05
         case .celebration: pose.happiness = 1; pose.leftOpen = 0.7; pose.rightOpen = 0.7
-        case .vision, .permission: pose.leftOpen = 1.06; pose.rightOpen = 1.06
+        case .vision: pose.leftOpen = 1.06; pose.rightOpen = 1.06
+        case .permission:
+            pose.leftOpen = 1.19
+            pose.rightOpen = 1.11
+            pose.gazeY = -0.035
+            pose.roll = -1.6
         default: break
         }
         return pose

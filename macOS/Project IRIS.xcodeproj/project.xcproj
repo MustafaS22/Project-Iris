@@ -81,7 +81,7 @@
         "CODE_SIGN_ENTITLEMENTS": "Configuration/Iris.entitlements",
         "CODE_SIGN_STYLE": "Automatic",
         "COMBINE_HIDPI_IMAGES": "YES",
-        "CURRENT_PROJECT_VERSION": "239",
+        "CURRENT_PROJECT_VERSION": "240",
         "DEVELOPMENT_TEAM": "5JDH4L7FK5",
         "ENABLE_APP_SANDBOX": "NO",
         "ENABLE_AUDIO_INPUT": "YES",
@@ -106,7 +106,7 @@
           "$(inherited)",
           "@executable_path/../Frameworks"
         ],
-        "MARKETING_VERSION": "2.1.4",
+        "MARKETING_VERSION": "2.1.5",
         "PRODUCT_BUNDLE_IDENTIFIER": "com.projectiris.Project-IRIS",
         "PRODUCT_NAME": "$(TARGET_NAME)",
         "REGISTER_APP_GROUPS": "YES",

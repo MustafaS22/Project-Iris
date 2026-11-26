@@ -13,7 +13,6 @@ struct IrisAvatar: View {
     @StateObject private var pointer = AvatarPointerProbe()
     @State private var motion: AvatarMotion
     @State private var visible = false
-    @State private var attention = 0.0
     @State private var glanceStarted: TimeInterval?
     @Environment(\.irisReduceMotion) private var systemReduceMotion
     @AppStorage("IrisReduceMotion") private var appReduceMotion = false
@@ -32,17 +31,16 @@ struct IrisAvatar: View {
                 TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !visible)) { _ in
                     let time = ProcessInfo.processInfo.systemUptime
                     let pose = motion.pose(at: time, glanceStarted: glanceStarted)
-                    IrisAvatarFace(pose: pointer.following(pose, at: time, size: size, enabled: visible && state != .sleeping && state != .dormant, guidance: movement ?? guidance, followsCursorAnywhere: followsCursorAnywhere), color: color, size: size, desktop: desktop, attention: attention, pulse: 0.88 + 0.12 * sin(time * 3))
+                    IrisAvatarFace(pose: pointer.following(pose, at: time, size: size, enabled: visible && state != .sleeping && state != .dormant && state != .permission, guidance: movement ?? guidance, followsCursorAnywhere: followsCursorAnywhere), color: color, size: size, desktop: desktop)
                 }
-            } else { IrisAvatarFace(pose: motion.pose(at: ProcessInfo.processInfo.systemUptime, reducedMotion: true), color: color, size: size, desktop: desktop, attention: attention) }
+            } else { IrisAvatarFace(pose: motion.pose(at: ProcessInfo.processInfo.systemUptime, reducedMotion: true), color: color, size: size, desktop: desktop) }
         }
         .background { if animated && !reduceMotion { AvatarPointerAnchor(probe: pointer).allowsHitTesting(false).accessibilityHidden(true) } }
         .accessibilityElement(children: .ignore).accessibilityLabel("Iris · \(state.label)")
-        .onAppear { visible = true; attention = state == .permission ? 1 : 0 }
+        .onAppear { visible = true }
         .onDisappear { visible = false }
         .onChange(of: state) { _, value in
             motion.transition(to: value, at: ProcessInfo.processInfo.systemUptime, glanceStarted: glanceStarted)
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.24)) { attention = value == .permission ? 1 : 0 }
         }
         .task(id: watchesWriting) {
             guard watchesWriting else { return }
@@ -61,14 +59,11 @@ struct IrisAvatar: View {
 }
 
 /// Stateless rendering shared by the live avatar and visual verification.
-struct IrisAvatarFace: View, Animatable {
+struct IrisAvatarFace: View {
     let pose: AvatarPose
     let color: Color
     let size: CGFloat
     var desktop = false
-    var attention = 0.0
-    var pulse = 1.0
-    var animatableData: Double { get { attention } set { attention = newValue } }
     var body: some View {
         ZStack {
             if desktop { RoundedRectangle(cornerRadius: size * 0.5, style: .continuous).fill(.black) }
@@ -92,15 +87,7 @@ struct IrisAvatarFace: View, Animatable {
                         mask.addLine(to: CGPoint(x: rect.minX, y: rect.maxY)); mask.closeSubpath()
                         eye.clip(to: mask)
                     }
-                    eye.fill(eyeShape(in: rect, openness: openness, smile: pose.happiness), with: .color(color.opacity(1 - attention)))
-                    if attention > 0 {
-                        let markWidth = size * 0.115
-                        let stem = CGRect(x: centerX - markWidth / 2, y: centerY - size * 0.215, width: markWidth, height: size * 0.26)
-                        let dot = CGRect(x: stem.minX, y: centerY + size * 0.105, width: markWidth, height: markWidth)
-                        let ink = GraphicsContext.Shading.color(color.opacity(attention * pulse))
-                        context.fill(Path(roundedRect: stem, cornerRadius: markWidth / 2), with: ink)
-                        context.fill(Path(ellipseIn: dot), with: ink)
-                    }
+                    eye.fill(eyeShape(in: rect, openness: openness, smile: pose.happiness), with: .color(color))
                 }
             }
         }

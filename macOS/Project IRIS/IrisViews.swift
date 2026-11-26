@@ -38,11 +38,15 @@ struct NotchSurface: View {
                 .transition(.opacity)
             }
         }
-        .frame(width: iris.expanded ? (iris.tab == .settings ? canvasSize.width : expandedWidth) : (notchWidth + 116))
+        .frame(width: iris.expanded ? (iris.tab == .settings ? max(1, canvasSize.width - 2 * (IrisNotchShape.shoulder + IrisNotchComputerGlow.margin)) : expandedWidth) : (notchWidth + 116))
         .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, IrisNotchShape.shoulder)
         .background(IrisNotchBackground(expanded: iris.expanded, accent: iris.accent))
         .clipShape(IrisNotchShape(bottomRadius: iris.expanded ? 26 : 14))
+        .overlay {
+            IrisNotchComputerGlow(shape: IrisNotchShape(bottomRadius: iris.expanded ? 26 : 14),
+                                  phase: iris.computer.presentation, accent: iris.accent)
+        }
         .contentShape(IrisNotchShape(bottomRadius: iris.expanded ? 26 : 14))
         .overlay(alignment: .bottom) {
             if !iris.expanded, let session = iris.data.session {
@@ -72,7 +76,6 @@ struct NotchSurface: View {
                 else { iris.togglePresence() }
             } label: {
                 IrisAvatar(state: iris.state, color: iris.accent, size: 30, animated: true)
-                    .modifier(ComputerAvatarGlow(phase: iris.computer.presentation, accent: iris.accent))
                     .frame(width: 48, height: notchHeight + 5)
             }.buttonStyle(.plain)
                 .help(iris.computer.needsAttention ? "Show permission request" : iris.expanded ? "Collapse Iris" : "Open Iris · \(iris.shortcuts.label(.notch))")

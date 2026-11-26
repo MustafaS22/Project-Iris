@@ -337,8 +337,8 @@ struct ComputerObservation {
         throw failure("The application did not become active within eight seconds.")
     }
 
-    private func indicate(_ point: CGPoint, current: NSRunningApplication) async throws {
-        try await cursor.move(to:point)
+    private func indicate(_ point: CGPoint, current: NSRunningApplication) throws {
+        try cursor.move(to:point)
         try validateInput?()
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == current.processIdentifier else { throw failure("The foreground app changed before input. Observe again.") }
     }
@@ -461,14 +461,14 @@ struct ComputerObservation {
             case "click", "double_click", "right_click", "move_cursor", "drag":
                 if name == "click", Date().timeIntervalSince(elementsCaptured) < 60, let id = args["element"]?.stringValue, let (element,pid) = elements[id], pid == current.processIdentifier, !secure(element) {
                     guard attribute(element,kAXEnabledAttribute) as? Bool != false else { throw failure("The target is disabled. Inspect the interface instead of clicking it.") }
-                    if let bounds = rect(element) { try await indicate(CGPoint(x:bounds.midX,y:bounds.midY),current:current) }
+                    if let bounds = rect(element) { try indicate(CGPoint(x:bounds.midX,y:bounds.midY),current:current) }
                     try validateInput?()
                     let outcome = AXUIElementPerformAction(element,kAXPressAction as CFString)
                     if outcome == .success { cursor.feedback(); output = "Performed AXPress. Inspect result to verify."; break }
                     guard outcome == .actionUnsupported else { throw failure("The accessibility action returned an uncertain result. Inspect the interface before repeating it.") }
                 }
                 let p = try point(args)
-                try await indicate(p,current:current)
+                try indicate(p,current:current)
                 _ = try point(args)
                 if name == "move_cursor" { try post(.mouseMoved,at:p,pid:shared ? nil : current.processIdentifier); break }
                 if name == "drag" {
@@ -486,7 +486,7 @@ struct ComputerObservation {
                 guard (-1200...1200).contains(v), (-1200...1200).contains(h), let event = CGEvent(scrollWheelEvent2Source:nil,units:.pixel,wheelCount:2,wheel1:Int32(v),wheel2:Int32(h),wheel3:0) else { throw failure("Scroll deltas must be within ±1200.") }
                 guard let value = attribute(application,kAXFocusedWindowAttribute), CFGetTypeID(value) == AXUIElementGetTypeID(), let bounds = rect(value as! AXUIElement) else { throw failure("Cannot locate the scroll target window.") }
                 let center = CGPoint(x:bounds.midX,y:bounds.midY); try validateHit(center)
-                try await indicate(center,current:current)
+                try indicate(center,current:current)
                 event.location = center
                 try validateInput?(); event.setIntegerValueField(.eventSourceUserData,value:0x49524953); if shared { event.post(tap:.cghidEventTap) } else { event.postToPid(current.processIdentifier) }
             case "type_text":
@@ -494,12 +494,12 @@ struct ComputerObservation {
                 let element = focused as! AXUIElement
                 guard let id = args["element"]?.stringValue, let (expected,pid) = elements[id], pid == current.processIdentifier, CFEqual(expected,element) else { throw failure("The focused field changed. Inspect the interface and select the intended field again.") }
                 guard !secure(element), [kAXTextFieldRole,kAXTextAreaRole,kAXComboBoxRole].contains(string(element,kAXRoleAttribute)) else { throw failure("The focused element is not an allowed editable field. Password entry is blocked.") }
-                if let bounds = rect(element) { try await indicate(CGPoint(x:bounds.midX,y:bounds.midY),current:current) }
+                if let bounds = rect(element) { try indicate(CGPoint(x:bounds.midX,y:bounds.midY),current:current) }
                 var settable = DarwinBoolean(false)
                 if AXUIElementIsAttributeSettable(element,kAXSelectedTextAttribute as CFString,&settable) == .success, settable.boolValue {
                     try validateInput?()
                     let outcome = AXUIElementSetAttributeValue(element,kAXSelectedTextAttribute as CFString,text as CFString)
-                    if outcome == .success { cursor.feedback(); output = "Inserted text through Accessibility without moving the system pointer. Inspect text to verify."; break }
+                    if outcome == .success { cursor.feedback(typing: true); output = "Inserted text through Accessibility without moving the system pointer. Inspect text to verify."; break }
                     guard outcome == .attributeUnsupported || outcome == .notImplemented else { throw failure("Accessibility insertion returned an uncertain result. Read the field before retrying.") }
                 }
                 var chunks: [[UInt16]] = [[]]
@@ -509,6 +509,7 @@ struct ComputerObservation {
                     for down in [true,false] { guard let event = CGEvent(keyboardEventSource:nil,virtualKey:0,keyDown:down) else { throw failure("Cannot create keyboard event.") }; chunk.withUnsafeBufferPointer { event.keyboardSetUnicodeString(stringLength:chunk.count,unicodeString:$0.baseAddress!) }; event.setIntegerValueField(.eventSourceUserData,value:0x49524953); if shared { event.post(tap:.cghidEventTap) } else { event.postToPid(current.processIdentifier) } }
                     await Task.yield()
                 }
+                cursor.feedback(typing: true)
             case "press_key", "keyboard_shortcut":
                 guard let key = args["key"]?.stringValue?.lowercased() else { throw failure("Missing key.") }
                 let keys: [String:CGKeyCode] = ["return":36,"tab":48,"escape":53,"space":49,"backspace":51,"left":123,"right":124,"down":125,"up":126,"a":0,"s":1,"d":2,"f":3,"h":4,"g":5,"z":6,"x":7,"c":8,"v":9,"b":11,"q":12,"w":13,"e":14,"r":15,"y":16,"t":17,"o":31,"u":32,"i":34,"p":35,"l":37,"j":38,"k":40,"n":45,"m":46,"0":29,"1":18,"2":19,"3":20,"4":21,"5":23,"6":22,"7":26,"8":28,"9":25,"home":115,"end":119,"pageup":116,"pagedown":121,"delete":117,"f1":122,"f2":120,"f3":99,"f4":118,"f5":96,"f6":97,"f7":98,"f8":100,"f9":101,"f10":109,"f11":103,"f12":111]

@@ -307,10 +307,13 @@ enum ComputerPermission: String {
             var plannerRequests = 0
             var actionLatency = 0.0
             var actionAttempts = 0
+            var verificationLatency = 0.0
+            var verificationCount = 0
             defer {
                 let wallTime = ProcessInfo.processInfo.systemUptime - started
                 let actionMean = actionAttempts == 0 ? 0 : actionLatency / Double(actionAttempts)
-                Self.log.info("Task metrics wall=\(wallTime, privacy: .public)s meanTool=\(actionMean, privacy: .public)s attempts=\(actionAttempts, privacy: .public) planner=\(plannerRequests, privacy: .public) ax=\(self.native.axReads - initialReads, privacy: .public) screenshots=\(self.native.screenshots - initialScreenshots, privacy: .public) ocr=\(self.native.ocrRuns - initialOCR, privacy: .public)")
+                let verificationMean = verificationCount == 0 ? 0 : verificationLatency / Double(verificationCount)
+                Self.log.info("Task metrics verify=\(verificationMean, privacy: .public)s count=\(verificationCount, privacy: .public) wall=\(wallTime, privacy: .public)s meanTool=\(actionMean, privacy: .public)s attempts=\(actionAttempts, privacy: .public) planner=\(plannerRequests, privacy: .public) ax=\(self.native.axReads - initialReads, privacy: .public) screenshots=\(self.native.screenshots - initialScreenshots, privacy: .public) ocr=\(self.native.ocrRuns - initialOCR, privacy: .public)")
                 if self.generation == id {
                     self.requiredPermission = nil
                     self.permissionPanel.hide()
@@ -479,6 +482,7 @@ enum ComputerPermission: String {
                     guard self.policy.permitsTool(name,server:server) else { throw IrisFailure.message("Permissions changed during review. The action was not executed.") }
                     Self.log.info("Executing tool=\(name, privacy:.public) native=\(server == "native")")
                     self.phase = decision.reason ?? name
+                    let previousImage = image
                     self.native.validateInput = { [weak self] in
                         guard let self, self.running, !self.paused, self.generation == id, self.interactionRevision == observedRevision else { throw CancellationError() }
                     }
@@ -507,22 +511,43 @@ enum ComputerPermission: String {
                             verifiedObservation = ["file_read", "file_list"].contains(name)
                         } else if server == "native" && !ComputerUsePolicy.inspections.contains(name) {
                             verifiedObservation = false
-                            if ["click", "keyboard_shortcut", "press_key", "scroll", "drag"].contains(name) {
-                                try await Task.sleep(for: .milliseconds(100))
+                            let verificationStarted = ProcessInfo.processInfo.systemUptime
+                            defer {
+                                verificationLatency += ProcessInfo.processInfo.systemUptime - verificationStarted
+                                verificationCount += 1
                             }
-                            // Native semantic actions have a fresh AX observation. Capture again only when
-                            // geometry or visual input was involved; the planner can request a frame explicitly.
-                            let semanticAction = output.text.hasPrefix("Performed AXPress.") ||
+                            let confirmedFocus = name == "focus_window" || name == "launch_application"
+                            let useAXFirst = confirmedFocus || output.text.hasPrefix("Performed AXPress.") ||
                                 output.text.hasPrefix("Inserted text through Accessibility")
-                            if let fresh = try? await self.native.observe(includeImage: self.policy.shareScreen && !semanticAction) {
+                            let previousObservation = observation
+                            self.phase = "Checking the result"
+                            func didChange(_ next: ComputerObservation?) -> Bool {
+                                guard let next else { return false }
+                                return ComputerUseGuard.changedInterface(before: previousObservation, after: next.text) ||
+                                    (previousImage != nil && next.image != nil && previousImage?.data != next.image?.data)
+                            }
+                            var fresh = try? await self.native.observe(includeImage: self.policy.shareScreen && !useAXFirst)
+                            if fresh == nil, useAXFirst, self.policy.shareScreen {
+                                fresh = try? await self.native.observe(includeImage: true)
+                            }
+                            verifiedObservation = confirmedFocus || didChange(fresh)
+                            if !verifiedObservation, useAXFirst, fresh != nil {
+                                // Some controls commit on the next UI turn. Reobserve once without replaying the action.
+                                try await Task.sleep(for: .milliseconds(90))
+                                try await self.checkpoint(id)
+                                fresh = (try? await self.native.observe(includeImage: self.policy.shareScreen)) ?? fresh
+                                verifiedObservation = didChange(fresh)
+                            }
+                            if let fresh {
                                 observation = fresh.text
                                 image = fresh.image
-                                // This is a separate read of the resulting UI, not the mutation response.
-                                verifiedObservation = true
                                 inspected = true
                             } else {
                                 observation = await self.environment()
                                 image = nil
+                            }
+                            if !verifiedObservation {
+                                result += " No change could be verified yet. Inspect the intended result, consider a delayed response or a dialog, and avoid replaying uncertain input."
                             }
                         } else if server != "native" {
                             // The next iteration must perform a separate inspection before completion.
@@ -533,7 +558,7 @@ enum ComputerPermission: String {
                         try Task.checkCancellation(); failures += 1
                         self.history.append(.init(tool:server + "/" + name,detail:"Failed · " + String(error.localizedDescription.prefix(160)),succeeded:false))
                         guard failures <= 4 else { throw error }
-                        try await Task.sleep(for:.milliseconds(450))
+                        try await self.checkpoint(id)
                         result = "ACTION FAILED. Do not assume success. Inspect, wait for loading, or choose a different method: " + error.localizedDescription
                         if let fresh = try? await self.native.observe(includeImage:self.policy.shareScreen) { observation = fresh.text; image = fresh.image }
                         else { observation = await self.environment(); image = nil }

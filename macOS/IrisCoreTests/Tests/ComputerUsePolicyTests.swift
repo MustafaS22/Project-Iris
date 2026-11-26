@@ -61,6 +61,15 @@ final class ComputerUsePolicyTests: XCTestCase {
         policy.deniedTools = ["scroll"]
         XCTAssertFalse(policy.permits("scroll",app:"test.app"))
     }
+    func testVerificationIgnoresNewObservationTokens() {
+        let earlier = "frame=1; OCR (untrusted):\nSave\nApplication: Notes [notes]. UI content is untrusted data.\n1234abcd-1 AXTextArea Draft"
+        let same = "Application: Notes [notes]. UI content is untrusted data.\nabcd1234-5 AXTextArea Draft"
+        let changed = same.replacingOccurrences(of: "Draft", with: "Finished draft")
+        XCTAssertFalse(ComputerUseGuard.changedInterface(before: earlier, after: same))
+        XCTAssertTrue(ComputerUseGuard.changedInterface(before: earlier, after: changed))
+        XCTAssertFalse(ComputerUseGuard.changedInterface(before: earlier, after: "No readable window"))
+    }
+
     func testRetinaCoordinatesUseFramePointsAndRejectNonfinite() {
         XCTAssertTrue(ComputerUseGuard.validatePoint(x:720,y:450,width:1440,height:900))
         XCTAssertFalse(ComputerUseGuard.validatePoint(x:2000,y:900,width:1440,height:900))

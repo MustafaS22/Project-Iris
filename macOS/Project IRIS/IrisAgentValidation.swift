@@ -205,6 +205,26 @@ import SwiftUI
                 }.padding(.horizontal, 20).background(Color(red: 0.07, green: 0.14, blue: 0.16))
                 try await render(preview, size: NSSize(width: 700, height: expanded ? 900 : 620), to: output.appendingPathComponent(label + ".png"))
             }
+            let traceCases: [(String, Bool, ComputerUsePresentation, Color)] = [
+                ("trace-collapsed", false, .executing, .orange),
+                ("trace-expanded", true, .executing, Color(red: 0.54, green: 0.67, blue: 1)),
+                ("trace-waiting", false, .waiting, .orange),
+                ("trace-idle", false, .idle, .orange)
+            ]
+            for (name, expanded, phase, accent) in traceCases {
+                let shape = IrisNotchShape(bottomRadius: expanded ? 26 : 14)
+                let preview = shape.fill(.black)
+                    .frame(width: expanded ? 520 : 316, height: expanded ? 178 : 40)
+                    .overlay { IrisNotchComputerGlow(shape: shape, phase: phase, accent: accent) }
+                    .overlay { IrisAvatar(state: phase == .waiting ? .permission : .idle, color: accent, size: 30) }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(red: 0.07, green: 0.11, blue: 0.14))
+                try await render(preview, size: NSSize(width: 640, height: 230), to: output.appendingPathComponent(name + ".png"))
+            }
+            let cursor = IrisComputerCursor()
+            try cursor.renderSample(to: output.appendingPathComponent("cursor-apricot.png"))
+            cursor.accent = NSColor(srgbRed: 0.56, green: 0.72, blue: 1, alpha: 1)
+            try cursor.renderSample(to: output.appendingPathComponent("cursor-blue.png"))
             NSLog("IRIS_NOTCH_APPEARANCE_PASS %@", output.path)
         } catch { NSLog("IRIS_NOTCH_APPEARANCE_FAILED %@", error.localizedDescription) }
         NSApp.terminate(nil)

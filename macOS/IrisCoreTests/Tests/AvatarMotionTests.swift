@@ -2,6 +2,19 @@ import XCTest
 @testable import IrisCore
 
 final class AvatarMotionTests: XCTestCase {
+    func testPermissionEyesLiftAndSettleWithoutAnAbruptTransition() {
+        var motion = AvatarMotion(state: .idle, at: 0, expressionSeed: 42)
+        let previous = motion.pose(at: 0.8)
+        motion.transition(to: .permission, at: 0.8)
+        XCTAssertEqual(motion.pose(at: 0.8), previous)
+        let expectant = motion.pose(at: 1.5)
+        XCTAssertGreaterThan(expectant.leftOpen, expectant.rightOpen)
+        XCTAssertLessThan(expectant.gazeY, -0.03)
+        XCTAssertGreaterThan(motion.pose(at: 4.5).gazeY, expectant.gazeY)
+        XCTAssertLessThan(motion.pose(at: 5.09).leftOpen, 0.12)
+        XCTAssertEqual(motion.pose(at: 12, reducedMotion: true), motion.pose(at: 18, reducedMotion: true))
+    }
+
     func testBlinkStartsAfterFiveSecondsAndRepeats() {
         XCTAssertEqual(AvatarMotion.blink(at: 0), 0)
         XCTAssertEqual(AvatarMotion.blink(at: 4.99), 0)

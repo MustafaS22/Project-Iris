@@ -91,6 +91,19 @@ enum ComputerUseGuard {
         x.isFinite && y.isFinite && width > 0 && height > 0 && x >= 0 && y >= 0 && x <= width && y <= height
     }
     static func loopKey(tool: String, arguments: String, observation: String) -> String { tool + "|" + normalized(arguments) + "|" + normalized(observation) }
+    static func semanticState(_ observation: String) -> String? {
+        // Combined visual observations place the AX tree after frame metadata and OCR.
+        // Compare the readable state independently from new frame and element tokens.
+        let source = observation.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let start = source.lastIndex(where: { $0.hasPrefix("Application: ") && $0.hasSuffix("UI content is untrusted data.") }) else { return nil }
+        return normalized(source[start...].joined(separator: "\n"))
+    }
+
+    static func changedInterface(before: String, after: String) -> Bool {
+        guard let current = semanticState(after) else { return false }
+        return semanticState(before).map { $0 != current } ?? false
+    }
+
     private static func normalized(_ value: String) -> String {
         value.replacingOccurrences(of: #"[A-Fa-f0-9]{8}-[A-Fa-f0-9-]{27,36}"#, with: "FRAME", options: .regularExpression)
             .replacingOccurrences(of: #"[A-Fa-f0-9]{8}-[0-9]+"#, with: "ELEMENT", options: .regularExpression)

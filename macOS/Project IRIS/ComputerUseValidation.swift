@@ -155,6 +155,10 @@ import MCP
             try await Task.sleep(for:.milliseconds(100)); loop.pause(); try require(loop.paused,"Pause failed"); loop.resume(); loop.stop()
             try require(!loop.running && !loop.awaitingApproval,"Stop left work running"); record("pause-stop","PASS: pause/resume state and stop cancel active local model task without executing an action"); loop.shutdown()
             if AXIsProcessTrusted() {
+                // The emergency-stop window exercised focus changes. Restore the intended test target.
+                let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.arize.iris.computer-fixture").first
+                guard let app else { throw IrisFailure.message("The validation fixture closed before the delegated task.") }
+                try await native.activateAndWait(app)
                 let fixture = IrisMCPConfiguration(name:"Unused test server",url:"http://127.0.0.1:5198/mcp",enabled:false)
                 iris.computer.mcp.configurations = [fixture]
                 iris.computer.policy.mode = .autonomous

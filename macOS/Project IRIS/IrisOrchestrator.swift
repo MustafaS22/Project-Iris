@@ -164,8 +164,9 @@ final class IrisOrchestrator: ObservableObject {
     }
     var preferences: Preferences { data.preferences }
     var state: IrisState {
+        if computer.needsAttention { return .permission }
         if error != nil { return .error }
-        if computer.running { return computer.needsAttention ? .permission : (computer.paused ? .idle : .thinking) }
+        if computer.running { return computer.paused ? .idle : .thinking }
         if welcome.active, welcome.celebrating { return .celebration }
         if voice.listening { return .listening }; if voice.speaking { return .answering }
         if voice.requesting { return .permission }; if contextBusy { return .vision }

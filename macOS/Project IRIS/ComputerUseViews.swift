@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Combine
+import QuartzCore
 import UniformTypeIdentifiers
 
 struct ComputerActivityView: View {
@@ -190,10 +191,9 @@ enum ComputerUsePresentation: Equatable {
         switch self {
         case .idle: 0
         case .executing: 0.58
-        case .waiting: 0.8
+        case .waiting: 0.35
         case .paused: 0.24
-        case .completed: 0.9
-        case .error: 0.68
+        case .completed, .error: 0
         }
     }
 
@@ -212,7 +212,21 @@ struct ComputerActionReview: Identifiable {
 @MainActor final class ComputerPermissionPanel {
     private var window: NSPanel?
     private let theme = Theme()
-    private var visibility = UUID()
+    private var dismissal: Task<Void, Never>?
+    private var presented: Content?
+    private var host: PermissionHostingView?
+
+    private enum Content {
+        case action(ComputerActionReview), system(ComputerPermission)
+
+        func matches(_ other: Content) -> Bool {
+            switch (self, other) {
+            case (.action(let first), .action(let second)): first.id == second.id
+            case (.system(let first), .system(let second)): first == second
+            default: false
+            }
+        }
+    }
 
     @MainActor private final class Theme: ObservableObject {
         @Published var accent = Color.accentColor
@@ -226,6 +240,11 @@ struct ComputerActionReview: Identifiable {
 
     func show(session: ComputerUseSession, accent: Color) {
         updateAccent(accent)
+        let content: Content
+        if let request = session.pendingReview { content = .action(request) }
+        else if let permission = session.requiredPermission { content = .system(permission) }
+        else { return }
+
         let pointer = NSEvent.mouseLocation
         let target = NSWorkspace.shared.frontmostApplication
         let appName = session.pendingReview?.application ?? target?.localizedName ?? "macOS"
@@ -235,7 +254,8 @@ struct ComputerActionReview: Identifiable {
             panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             panel.isOpaque = false
             panel.backgroundColor = .clear
-            panel.hasShadow = true
+            panel.hasShadow = false
+            panel.animationBehavior = .none
             panel.hidesOnDeactivate = false
             panel.becomesKeyOnlyIfNeeded = true
             panel.isReleasedWhenClosed = false
@@ -243,35 +263,93 @@ struct ComputerActionReview: Identifiable {
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
             window = panel
         }
-        visibility = UUID()
-        let view = PermissionHostingView(rootView: Card(session: session, theme: theme, appName: appName))
-        panel.contentView = view
+        let wasOpen = panel.isVisible && !panel.ignoresMouseEvents
+        let changed = !(presented?.matches(content) ?? false)
+        dismissal?.cancel()
+        dismissal = nil
+
+        let view: PermissionHostingView
+        if let host { view = host }
+        else {
+            view = PermissionHostingView(rootView: Card(session: session, theme: theme, appName: appName, content: content))
+            view.wantsLayer = true
+            panel.contentView = view
+            host = view
+        }
+        if changed {
+            view.rootView = Card(session: session, theme: theme, appName: appName, content: content)
+            presented = content
+        }
         let size = view.fittingSize
-        if let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) ?? NSScreen.main {
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) ?? NSScreen.main
+        let frame: NSRect
+        if let screen {
             let area = screen.visibleFrame
-            panel.setFrame(NSRect(x: area.maxX - size.width - 22, y: area.maxY - size.height - 20, width: size.width, height: size.height), display: true)
-        } else { panel.setContentSize(size) }
+            frame = NSRect(x: area.maxX - size.width - 12, y: area.maxY - size.height - 10, width: size.width, height: size.height)
+        } else { frame = NSRect(origin: panel.frame.origin, size: size) }
+
+        if wasOpen && changed && panel.screen == screen && !IrisMotion.reduced {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.20
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(frame, display: true)
+            }, completionHandler: nil)
+        } else {
+            panel.setFrame(frame, display: true)
+        }
         panel.ignoresMouseEvents = false
-        panel.alphaValue = 1
+        if !wasOpen { animate(view, visible: true, entering: !panel.isVisible) }
         panel.orderFrontRegardless()
     }
 
     func hide() {
-        guard let panel = window, panel.isVisible else { return }
+        guard let panel = window, panel.isVisible, !panel.ignoresMouseEvents else { return }
         panel.ignoresMouseEvents = true
-        if IrisMotion.reduced { panel.orderOut(nil); panel.contentView = nil; return }
-        let token = UUID()
-        visibility = token
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.16
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self, weak panel] in
-            Task { @MainActor in
-                guard self?.visibility == token else { return }
-                panel?.orderOut(nil)
-                panel?.contentView = nil
-            }
-        })
+        if IrisMotion.reduced { clearPanel(); return }
+        if let host { animate(host, visible: false) }
+        dismissal = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
+            self?.clearPanel()
+        }
+    }
+
+    private func clearPanel() {
+        window?.orderOut(nil)
+        window?.contentView = nil
+        host = nil
+        presented = nil
+        dismissal = nil
+    }
+
+    private func animate(_ view: PermissionHostingView, visible: Bool, entering: Bool = false) {
+        guard let layer = view.layer else { return }
+        let reduced = IrisMotion.reduced
+        let rest = CATransform3DIdentity
+        let tucked = CATransform3DScale(CATransform3DMakeTranslation(5, 6, 0), 0.96, 0.96, 1)
+        let initialTransform = entering ? tucked : (layer.presentation()?.transform ?? layer.transform)
+        let initialOpacity: Float = entering ? 0.18 : (layer.presentation()?.opacity ?? layer.opacity)
+        layer.removeAnimation(forKey: "panelAppearance")
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.transform = visible ? rest : tucked
+        layer.opacity = visible ? 1 : 0
+        CATransaction.commit()
+        guard !reduced else { return }
+
+        let motion = CABasicAnimation(keyPath: "transform")
+        motion.fromValue = NSValue(caTransform3D: initialTransform)
+        motion.toValue = NSValue(caTransform3D: layer.transform)
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = initialOpacity
+        fade.toValue = layer.opacity
+        let duration = visible ? 0.24 : 0.18
+        motion.duration = duration
+        fade.duration = duration
+        let group = CAAnimationGroup()
+        group.animations = [motion, fade]
+        group.duration = duration
+        group.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.75, 0.25, 1)
+        layer.add(group, forKey: "panelAppearance")
     }
 
     private final class PermissionHostingView: NSHostingView<Card> {
@@ -279,9 +357,10 @@ struct ComputerActionReview: Identifiable {
     }
 
     private struct Card: View {
-        @ObservedObject var session: ComputerUseSession
+        weak var session: ComputerUseSession?
         @ObservedObject var theme: Theme
         let appName: String
+        let content: Content
 
         var body: some View {
             VStack(alignment: .leading, spacing: 10) {
@@ -292,7 +371,8 @@ struct ComputerActionReview: Identifiable {
                         Text(appName).font(.caption.weight(.medium)).foregroundStyle(theme.accent).lineLimit(1)
                     }
                 }
-                if let request = session.pendingReview {
+                switch content {
+                case .action(let request):
                     Text(request.reason).font(.callout).lineLimit(3)
                     ScrollView {
                         Text(request.detail).font(.system(.caption, design: .monospaced))
@@ -301,25 +381,25 @@ struct ComputerActionReview: Identifiable {
                     .frame(height: 52)
                     .foregroundStyle(.secondary)
                     HStack {
-                        Button("Deny") { session.resolve(.deny, requestID: request.id) }
+                        Button("Deny") { session?.resolve(.deny, requestID: request.id) }
                         Spacer()
-                        Button("Allow Once") { session.resolve(.once, requestID: request.id) }
+                        Button("Allow Once") { session?.resolve(.once, requestID: request.id) }
                             .buttonStyle(.borderedProminent).tint(theme.accent)
                     }
                     if let category = request.category {
                         Divider()
                         Text(category.title).font(.caption).foregroundStyle(.secondary)
                         HStack {
-                            Button("Allow All for This Task") { session.resolve(.task, requestID: request.id) }
+                            Button("Allow All for This Task") { session?.resolve(.task, requestID: request.id) }
                             Spacer()
-                            Button("Always Allow") { session.resolve(.always, requestID: request.id) }
+                            Button("Always Allow") { session?.resolve(.always, requestID: request.id) }
                                 .help("Remember permission for " + category.title.lowercased())
                         }.controlSize(.small)
                     }
-                } else if let permission = session.requiredPermission {
+                case .system(let permission):
                     Text("Iris needs macOS \(permission.rawValue) access to continue.").font(.callout)
                     HStack {
-                        Button("Stop") { session.stop() }
+                        Button("Stop") { session?.stop() }
                         Spacer()
                         Button("Open Settings") { permission.openRequest() }
                             .buttonStyle(.borderedProminent).tint(theme.accent)
@@ -329,6 +409,8 @@ struct ComputerActionReview: Identifiable {
             .padding(16).frame(width: 360)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(theme.accent.opacity(0.25)))
+            .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
+            .padding(10)
             .preferredColorScheme(.dark)
         }
     }
