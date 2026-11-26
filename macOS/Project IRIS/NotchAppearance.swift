@@ -50,7 +50,7 @@ struct IrisNotchBackground: View {
 
 /// Uses the same path as the notch fill and hit region. The even-odd mask removes all interior light.
 struct IrisNotchComputerGlow: View, Animatable {
-    static let margin: CGFloat = 10
+    static let margin: CGFloat = 14
     var shape: IrisNotchShape
     let phase: ComputerUsePresentation
     let accent: Color
@@ -63,26 +63,37 @@ struct IrisNotchComputerGlow: View, Animatable {
 
     var body: some View {
         let strength: Double = switch phase {
-        case .executing: 0.82
-        case .waiting: 0.43
-        case .paused: 0.22
+        case .executing: 0.84
+        case .waiting: 0.50
+        case .paused: 0.25
         default: 0
         }
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || phase != .executing)) { clock in
-            let cycle = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 5.8)
-            let breath = reduceMotion || phase != .executing ? 0.93 : 0.87 + 0.13 * cos(cycle * 2 * .pi / 5.8)
+            let cycle = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 6.8)
+            let breath = reduceMotion || phase != .executing ? 0.93 : 0.90 + 0.10 * cos(cycle * 2 * .pi / 6.8)
             Canvas { context, size in
                 let canvas = CGRect(origin: .zero, size: size)
-                let outline = shape.path(in: canvas.insetBy(dx: Self.margin, dy: Self.margin))
+                let body = canvas.insetBy(dx: Self.margin, dy: Self.margin)
+                let outline = shape.path(in: body)
                 var exterior = Path(canvas)
                 exterior.addPath(outline)
                 var outside = context
                 outside.clip(to: exterior, style: .init(eoFill: true))
                 outside.drawLayer { diffusion in
-                    diffusion.addFilter(.blur(radius: 3.3))
-                    diffusion.stroke(outline, with: .color(accent.opacity(0.68)), lineWidth: 3.1)
+                    diffusion.addFilter(.blur(radius: 4.2))
+                    let light = GraphicsContext.Shading.linearGradient(
+                        Gradient(colors: [accent.opacity(0.30), accent.opacity(0.84)]),
+                        startPoint: CGPoint(x: body.midX, y: body.minY),
+                        endPoint: CGPoint(x: body.midX, y: body.maxY)
+                    )
+                    diffusion.stroke(outline, with: light, lineWidth: 5.3)
                 }
-                outside.stroke(outline, with: .color(accent), lineWidth: 1.9)
+                let edge = GraphicsContext.Shading.linearGradient(
+                    Gradient(colors: [accent.opacity(0.40), accent.opacity(0.83)]),
+                    startPoint: CGPoint(x: body.midX, y: body.minY),
+                    endPoint: CGPoint(x: body.midX, y: body.maxY)
+                )
+                outside.stroke(outline, with: edge, lineWidth: 1.45)
             }
             .opacity(breath)
         }

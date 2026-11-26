@@ -207,6 +207,7 @@ struct ComputerActionReview: Identifiable {
     let application: String
     let detail: String
     let category: ComputerApprovalCategory?
+    var preview: String? = nil
 }
 
 @MainActor final class ComputerPermissionPanel {
@@ -234,6 +235,17 @@ struct ComputerActionReview: Identifiable {
 
     #if DEBUG
     var isVisible: Bool { window?.isVisible ?? false }
+    static func renderSample(to output: URL) async throws {
+        let theme = Theme()
+        theme.accent = .orange
+        let scoped = ComputerActionReview(action: "focus_window", reason: "Switch to Notes and find today’s draft.", application: "Notes", detail: "native/focus_window", category: .navigation)
+        let detailed = ComputerActionReview(action: "file_delete", reason: "Delete the draft from the project folder.", application: "Finder", detail: "native/file_delete\n{\"path\":\"draft.txt\"}", category: nil)
+        for (name, request) in [("approval-routine", scoped), ("approval-detailed", detailed)] {
+            let card = Card(session: nil, theme: theme, appName: request.application, content: .action(request))
+            let size = PermissionHostingView(rootView: card).fittingSize
+            try await IrisAgentValidation.render(card, size: size, to: output.appendingPathComponent(name + ".png"))
+        }
+    }
     #endif
 
     func updateAccent(_ accent: Color) { theme.accent = accent }
@@ -362,57 +374,81 @@ struct ComputerActionReview: Identifiable {
         let appName: String
         let content: Content
 
+        private var title: String {
+            switch content {
+            case .action: "Allow this action?"
+            case .system(let permission): "Allow \(permission.rawValue)"
+            }
+        }
+
         var body: some View {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    IrisAvatar(state: .permission, color: theme.accent, size: 25, animated: true, desktop: true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Iris needs your attention").font(.headline)
-                        Text(appName).font(.caption.weight(.medium)).foregroundStyle(theme.accent).lineLimit(1)
+                HStack(spacing: 9) {
+                    IrisAvatar(state: .permission, color: theme.accent, size: 21, animated: true, desktop: true)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title).font(.subheadline.weight(.semibold))
+                        Text(appName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
+
                 switch content {
                 case .action(let request):
-                    Text(request.reason).font(.callout).lineLimit(3)
-                    ScrollView {
-                        Text(request.detail).font(.system(.caption, design: .monospaced))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(request.reason).font(.callout).fixedSize(horizontal: false, vertical: true).lineLimit(2)
+                    if request.category == nil {
+                        ScrollView {
+                            Text(request.detail)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(height: 62)
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                        .background(.black.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
+                        .accessibilityLabel("Action details")
+                    } else if let preview = request.preview, !preview.isEmpty {
+                        Text(preview).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     }
-                    .frame(height: 52)
-                    .foregroundStyle(.secondary)
-                    HStack {
+
+                    HStack(spacing: 8) {
                         Button("Deny") { session?.resolve(.deny, requestID: request.id) }
+                            .buttonStyle(.borderless)
                         Spacer()
+                        if let category = request.category {
+                            Menu {
+                                Section(category.title) {
+                                    Button("Allow All for This Task") { session?.resolve(.task, requestID: request.id) }
+                                    Button("Always Allow") { session?.resolve(.always, requestID: request.id) }
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis").frame(width: 16)
+                            }
+                            .menuIndicator(.hidden)
+                            .accessibilityLabel("More approval options")
+                            .help("More approval options")
+                        }
                         Button("Allow Once") { session?.resolve(.once, requestID: request.id) }
                             .buttonStyle(.borderedProminent).tint(theme.accent)
                     }
-                    if let category = request.category {
-                        Divider()
-                        Text(category.title).font(.caption).foregroundStyle(.secondary)
-                        HStack {
-                            Button("Allow All for This Task") { session?.resolve(.task, requestID: request.id) }
-                            Spacer()
-                            Button("Always Allow") { session?.resolve(.always, requestID: request.id) }
-                                .help("Remember permission for " + category.title.lowercased())
-                        }.controlSize(.small)
-                    }
                 case .system(let permission):
-                    Text("Iris needs macOS \(permission.rawValue) access to continue.").font(.callout)
+                    Text("Enable access in macOS settings to continue.").font(.callout)
                     HStack {
-                        Button("Stop") { session?.stop() }
+                        Button("Stop") { session?.stop() }.buttonStyle(.borderless)
                         Spacer()
                         Button("Open Settings") { permission.openRequest() }
                             .buttonStyle(.borderedProminent).tint(theme.accent)
                     }
                 }
             }
-            .padding(16).frame(width: 360)
+            .padding(14)
+            .frame(width: 320)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(theme.accent.opacity(0.25)))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.13)).allowsHitTesting(false))
             .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
             .padding(10)
             .preferredColorScheme(.dark)
         }
+
     }
 }
 

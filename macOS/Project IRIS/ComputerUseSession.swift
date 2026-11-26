@@ -470,7 +470,7 @@ enum ComputerPermission: String {
                             : (server == "native" ? (target?.localizedName ?? "macOS") : server)
                         try await self.review(.init(action: name, reason: decision.reason ?? name,
                                                     application: appName, detail: "\(server)/\(name)\n\(serialized)\n\(actualTarget)",
-                                                    category: category))
+                                                    category: category, preview: category == .localDrafting ? args["text"]?.stringValue : nil))
                         try await self.checkpoint(id)
                         let foreground = NSWorkspace.shared.frontmostApplication?.processIdentifier
                         if self.interactionRevision != observedRevision || (server == "native" && foreground != target?.processIdentifier) {

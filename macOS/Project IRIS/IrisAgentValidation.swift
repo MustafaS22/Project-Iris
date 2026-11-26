@@ -225,6 +225,7 @@ import SwiftUI
             try cursor.renderSample(to: output.appendingPathComponent("cursor-apricot.png"))
             cursor.accent = NSColor(srgbRed: 0.56, green: 0.72, blue: 1, alpha: 1)
             try cursor.renderSample(to: output.appendingPathComponent("cursor-blue.png"))
+            try await ComputerPermissionPanel.renderSample(to: output)
             NSLog("IRIS_NOTCH_APPEARANCE_PASS %@", output.path)
         } catch { NSLog("IRIS_NOTCH_APPEARANCE_FAILED %@", error.localizedDescription) }
         NSApp.terminate(nil)
