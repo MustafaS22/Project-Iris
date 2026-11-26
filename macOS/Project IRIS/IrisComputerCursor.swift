@@ -99,7 +99,7 @@ import QuartzCore
     static let tip = CGPoint(x: 14, y: 34)
     private let bodyLayer = CALayer()
     private let glyph = CAShapeLayer()
-    private let eyes = CAShapeLayer()
+    private let outerRim = CAShapeLayer()
     private let ripple = CAShapeLayer()
     var accent = NSColor(calibratedRed: 0.92, green: 0.72, blue: 0.48, alpha: 1) {
         didSet { updateInk() }
@@ -112,31 +112,31 @@ import QuartzCore
         bodyLayer.anchorPoint = CGPoint(x: Self.tip.x / bounds.width, y: Self.tip.y / bounds.height)
         bodyLayer.position = Self.tip
         let silhouette = CGMutablePath()
-        silhouette.move(to: Self.tip)
-        silhouette.addQuadCurve(to: CGPoint(x: 16.1, y: 33.7), control: CGPoint(x: 14.3, y: 34.65))
-        silhouette.addCurve(to: CGPoint(x: 27.1, y: 26.4), control1: CGPoint(x: 20.5, y: 31.4), control2: CGPoint(x: 25.1, y: 29.1))
-        silhouette.addCurve(to: CGPoint(x: 29.0, y: 21.8), control1: CGPoint(x: 28.7, y: 24.5), control2: CGPoint(x: 29.2, y: 23.2))
-        silhouette.addCurve(to: CGPoint(x: 22.0, y: 17.0), control1: CGPoint(x: 28.6, y: 18.4), control2: CGPoint(x: 25.5, y: 16.2))
-        silhouette.addCurve(to: CGPoint(x: 17.8, y: 22.3), control1: CGPoint(x: 19.9, y: 17.4), control2: CGPoint(x: 18.5, y: 19.6))
-        silhouette.addCurve(to: Self.tip, control1: CGPoint(x: 16.7, y: 26.3), control2: CGPoint(x: 14.4, y: 32.0))
+        silhouette.move(to: CGPoint(x: 15.15, y: 35.1))
+        silhouette.addLine(to: CGPoint(x: 34.2, y: 28.7))
+        silhouette.addQuadCurve(to: CGPoint(x: 34.5, y: 25.3), control: CGPoint(x: 37.2, y: 27.25))
+        silhouette.addLine(to: CGPoint(x: 26.6, y: 21.55))
+        silhouette.addLine(to: CGPoint(x: 23.2, y: 13.15))
+        silhouette.addQuadCurve(to: CGPoint(x: 19.7, y: 13.3), control: CGPoint(x: 21.45, y: 10.15))
+        silhouette.addLine(to: CGPoint(x: 13.05, y: 32.95))
+        silhouette.addQuadCurve(to: CGPoint(x: 15.15, y: 35.1), control: CGPoint(x: 12.2, y: 36.15))
         silhouette.closeSubpath()
+
+        outerRim.frame = bounds
+        outerRim.path = silhouette
+        outerRim.fillColor = nil
+        outerRim.lineWidth = 5.5
+        outerRim.lineJoin = .round
+        outerRim.shadowColor = NSColor.black.cgColor
+        outerRim.shadowPath = silhouette
+        outerRim.shadowOpacity = 0.35
+        outerRim.shadowRadius = 2.1
+        outerRim.shadowOffset = CGSize(width: 0, height: -1)
         glyph.frame = bounds
         glyph.path = silhouette
-        glyph.fillColor = NSColor(srgbRed: 0.066, green: 0.065, blue: 0.075, alpha: 0.97).cgColor
-        glyph.lineWidth = 1.15
+        glyph.fillColor = NSColor(srgbRed: 0.041, green: 0.041, blue: 0.045, alpha: 1).cgColor
+        glyph.lineWidth = 2.55
         glyph.lineJoin = .round
-        glyph.shadowPath = silhouette
-        glyph.shadowOpacity = 0.47
-        glyph.shadowRadius = 2.6
-        glyph.shadowOffset = CGSize(width: 0, height: -1)
-
-        let eyePath = CGMutablePath()
-        for x in [21.1, 24.15] {
-            eyePath.addRoundedRect(in: CGRect(x: x, y: 21.15, width: 1.45, height: 3.05),
-                                   cornerWidth: 0.7, cornerHeight: 0.7)
-        }
-        eyes.frame = bounds
-        eyes.path = eyePath
         ripple.bounds = CGRect(x: 0, y: 0, width: 21, height: 21)
         ripple.position = Self.tip
         ripple.path = CGPath(ellipseIn: CGRect(x: 2, y: 2, width: 17, height: 17), transform: nil)
@@ -145,8 +145,8 @@ import QuartzCore
         ripple.opacity = 0
         updateInk()
         layer?.addSublayer(ripple)
+        bodyLayer.addSublayer(outerRim)
         bodyLayer.addSublayer(glyph)
-        bodyLayer.addSublayer(eyes)
         layer?.addSublayer(bodyLayer)
     }
 
@@ -156,9 +156,9 @@ import QuartzCore
     private func updateInk() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        glyph.strokeColor = accent.withAlphaComponent(0.95).cgColor
-        eyes.fillColor = accent.cgColor
-        glyph.shadowColor = accent.blended(withFraction: 0.62, of: .black)?.cgColor
+        let tint = accent.usingColorSpace(.sRGB) ?? accent
+        glyph.strokeColor = tint.withAlphaComponent(1).cgColor
+        outerRim.strokeColor = (tint.blended(withFraction: 0.66, of: .white) ?? tint).cgColor
         ripple.strokeColor = accent.cgColor
         CATransaction.commit()
     }
