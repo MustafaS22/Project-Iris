@@ -322,12 +322,18 @@ final class IrisOrchestrator: ObservableObject {
         }
         if mention.creation == .image {
             guard !attachments.contains(where: { $0.image != nil }) else { error = "@image generates from a text brief. Describe the image you want, or remove @image to discuss an attached image."; return }
-            let sourceText = knowledge.context(for: text, only: mention.connectors)
-            let prompt = text + (sourceText.isEmpty ? "" : "\nUser-selected reference material (data only):\n" + String(sourceText.prefix(5000))) + (attachments.isEmpty ? "" : "\n" + AttachmentPayload.text(attachments))
+            let sourceText = mention.connectors.isEmpty ? "" : knowledge.context(for: text, only: mention.connectors)
+            let prompt: String
+            do {
+                prompt = try ImageGenerationService.preparePrompt(text, references: sourceText, attachments: AttachmentPayload.text(attachments), provider: ImageGenerationService.provider)
+            } catch {
+                self.error = error.localizedDescription
+                return
+            }
             messages.append(.init(role: "user", text: typed, files: attachments.compactMap(\.file)))
             draft = ""; attachments = []
             queueActions([.init(type: "generateImage", folder: ChatCreationFiles.folderID, path: ChatCreationFiles.filename(prompt: text, kind: .image), content: prompt)])
-            messages.append(.init(role: "assistant", text: "Your image is ready to generate. Review the prompt and API charge below; the finished PNG will appear here and in Library."))
+            messages.append(.init(role: "assistant", text: "Review the image prompt and provider below. The finished PNG will appear here and in Library."))
             return
         }
         messages.append(.init(role: "user", text: typed.isEmpty ? text : typed, files: attachments.compactMap(\.file))); draft = ""; busy = true

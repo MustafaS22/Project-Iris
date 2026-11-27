@@ -121,6 +121,33 @@ enum ImageAPIVault {
         }
     }
 
+    static func preparePrompt(_ brief: String, references: String, attachments: String, provider: ImageProvider) throws -> String {
+        var prompt = brief.trimmingCharacters(in: .whitespacesAndNewlines)
+        try validate(prompt, provider: provider)
+        for (label, context) in [("Selected references", references), ("Attached text", attachments)] where !context.isEmpty {
+            let heading = "\n\n" + label + ":\n"
+            var remaining = characterLimit(for: provider) - prompt.utf16.count - heading.utf16.count
+            guard remaining > 0 else { break }
+            let excerpt = context.prefix { character in
+                remaining -= String(character).utf16.count
+                return remaining >= 0
+            }
+            if !excerpt.isEmpty { prompt += heading + excerpt }
+        }
+        return prompt
+    }
+
+    private static func characterLimit(for provider: ImageProvider) -> Int {
+        provider == .cloudflare ? 2048 : 12_000
+    }
+
+    private static func validate(_ prompt: String, provider: ImageProvider) throws {
+        guard !prompt.isEmpty, prompt.utf16.count <= characterLimit(for: provider) else {
+            let limit = provider == .cloudflare ? "2,048" : "12,000"
+            throw IrisFailure.message("Use an image prompt of 1–\(limit) characters.")
+        }
+    }
+
     static func generate(prompt: String, session: URLSession = .shared) async throws -> Data {
         let prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let provider = provider
@@ -128,16 +155,14 @@ enum ImageAPIVault {
         switch provider {
         case .cloudflare:
             guard let credential = try ImageAPIVault.readCloudflare() else {
-                throw IrisFailure.message("Add your Cloudflare Account ID and Workers AI token in Settings → AI → Image generation.")
+                throw IrisFailure.message("Add your Cloudflare Account ID and Workers AI token in Settings → Image generation.")
             }
             request = try cloudflareRequest(prompt: prompt, credential: credential)
         case .openAI:
             guard let key = try ImageAPIVault.read(), !key.isEmpty else {
-                throw IrisFailure.message("Add an OpenAI image API key in Settings → AI → Image generation, or choose Cloudflare. ChatGPT sign-in does not enable the Images API.")
+                throw IrisFailure.message("Add an OpenAI image API key in Settings → Image generation, or choose Cloudflare. ChatGPT sign-in does not enable the Images API.")
             }
-            guard !prompt.isEmpty, prompt.count <= 12_000 else {
-                throw IrisFailure.message("Use an image prompt of 1–12,000 characters.")
-            }
+            try validate(prompt, provider: .openAI)
             request = try makeRequest(url: URL(string: "https://api.openai.com/v1/images/generations")!, token: key, body: [
                 "model": model, "prompt": prompt, "n": 1, "size": "1024x1024", "quality": "low", "output_format": "png"
             ])
@@ -162,9 +187,7 @@ enum ImageAPIVault {
     }
 
     static func cloudflareRequest(prompt: String, credential: CloudflareImageCredential) throws -> URLRequest {
-        guard !prompt.isEmpty, prompt.utf16.count <= 2048 else {
-            throw IrisFailure.message("Use an image prompt of 1–2,048 characters for FLUX.1 Schnell.")
-        }
+        try validate(prompt, provider: .cloudflare)
         let url = URL(string: "https://api.cloudflare.com/client/v4/accounts/\(credential.accountID)/ai/run/\(cloudflareModel)")!
         return try makeRequest(url: url, token: credential.token, body: ["prompt": prompt, "steps": 4])
     }
