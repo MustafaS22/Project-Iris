@@ -124,7 +124,7 @@ struct CreationView: View {
                 IrisPicker("Save in", selection: $folderID, display: iris.actions.folders.first { $0.id == folderID }?.name ?? "Choose a folder", options: [.init(value: "", title: "Choose a folder")] + iris.actions.folders.map { .init(value: $0.id, title: $0.name, symbol: "folder") })
                 Button("Grant folder…") { iris.actions.grant() }.buttonStyle(IrisActionStyle())
             }
-            Text("1024×1024 PNG · low quality. Uses a separate OpenAI API key and billing. ChatGPT sign-in does not include image generation. You review the prompt before a paid request.").font(.caption).foregroundStyle(IrisDesign.secondary)
+            Text(ImageGenerationService.reviewDescription).font(.caption).foregroundStyle(IrisDesign.secondary)
             Button("Review image generation", systemImage: "sparkles") { prepareImage() }.buttonStyle(IrisActionStyle(primary: true)).disabled(brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || folderID.isEmpty || iris.busy)
             if let imagePreview { Image(nsImage: imagePreview).resizable().scaledToFit().frame(maxHeight: 360).clipShape(RoundedRectangle(cornerRadius: 16)).frame(maxWidth: .infinity) }
             if iris.busy { Label(iris.requestPhase, systemImage: "hourglass").font(.caption).foregroundStyle(IrisDesign.secondary); Button("Stop") { iris.cancelModel() } }

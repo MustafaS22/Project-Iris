@@ -104,7 +104,7 @@ struct ActionReview: View {
                     Text(command).font(.system(size: 12, design: .monospaced)).textSelection(.enabled).padding(12).background(.black, in: RoundedRectangle(cornerRadius: 10))
                     Text("This runs outside Iris's sandbox with your normal account access. Project scripts and dependency installation can execute code. Only run projects you trust. A server keeps running until you stop it with Control-C in Terminal.").font(.caption).foregroundStyle(.orange)
                 }
-                if action.type == "generateImage" { Text("Sends this prompt to OpenAI's Images API using your saved API key. One 1024×1024 image at low quality. Model: " + ImageGenerationService.model + ". Uses separate API billing, not your ChatGPT allowance. Cancellation may not prevent provider charges.").font(.caption).foregroundStyle(.orange) }
+                if action.type == "generateImage" { Text(ImageGenerationService.reviewDescription).font(.caption).foregroundStyle(.orange) }
                 if action.type == "createDocument" { Text("Creates a real document locally from the content below. Replaces the destination if it exists. PDF and RTF preserve Unicode and basic Markdown styling; use HTML for fully typeset LaTeX.").font(.caption).foregroundStyle(IrisDesign.secondary) }
                 if action.type == "playSpotifyPlaylist" { Text("Spotify will open and receive a playback request for this playlist. macOS may ask for Automation permission.").font(.caption) }
                 if let content = action.content { ScrollView { Text(content).font(.system(size: 13, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(minHeight: 180) }
