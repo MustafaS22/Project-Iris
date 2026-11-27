@@ -138,6 +138,7 @@ final class IrisAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         IrisAppIcons.shared.restoreSaved()
         ScreenGuidance.startTracking()
         iris.openFloating = { [weak self] in self?.showFloating() }
+        iris.openFloatingPreview = { [weak self] in self?.showFloatingQuiet() }
         iris.openFloatingTyping = { [weak self] in self?.showFloatingTyping() }
         iris.actions.drawOnScreen = { [weak self] content in
             guard let floating = self?.floating else { throw IrisFailure.message("Open floating Iris first from the menu bar or your keyboard shortcut.") }

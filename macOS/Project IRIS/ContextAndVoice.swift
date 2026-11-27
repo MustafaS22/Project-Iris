@@ -167,7 +167,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         capture?.stop(); capture = nil
         recognition?.cancel(); recognition = nil
     }
-    func beginStreamingReply(voice: String, model: String, style: String, auth: String, speed: Double, economy: Bool = true, provider: String = "gemini") {
+    func beginStreamingReply(voice: String, model: String, style: String, auth: String, speed: Double, economy: Bool = true, provider: String = "gemini", fishVoice: FishVoice = .simonne) {
         stopSpeaking(); claimPlayback(); speechError = nil
         let token = UUID(); playbackID = token
         replyChunker = ReplySpeechChunker(economy: economy)
@@ -192,7 +192,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
                         try player.enqueue(cached, rate: speed)
                     } else {
                         if provider == "fish" {
-                            try await FishSpeechClient.stream(text: chunk) { [weak self] bytes in
+                            try await FishSpeechClient.stream(text: chunk, voice: fishVoice) { [weak self] bytes in
                                 guard let self, self.playbackID == token, !Task.isCancelled else { throw CancellationError() }
                                 try player.enqueue(bytes, rate: speed)
                             }
@@ -232,28 +232,28 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         if !chunks.isEmpty, !speaking { preparingSpeech = true }
         if final { replyContinuation?.finish(); replyContinuation = nil; replyChunker = nil }
     }
-    func speak(_ text: String, identifier: String? = nil, rate: Float = 0.49, provider: String = "fish", server: String = VoiceBoxClient.defaultServer, profile: String? = nil, speed: Double = 1, preview: Bool = false, geminiVoice: String = GeminiSpeechClient.defaultVoice, geminiModel: String = GeminiSpeechClient.defaultModel, geminiStyle: String = "Natural", geminiAuth: String = "apiKey", economy: Bool = true) {
+    func speak(_ text: String, identifier: String? = nil, rate: Float = 0.49, provider: String = "fish", server: String = VoiceBoxClient.defaultServer, profile: String? = nil, speed: Double = 1, preview: Bool = false, geminiVoice: String = GeminiSpeechClient.defaultVoice, geminiModel: String = GeminiSpeechClient.defaultModel, geminiStyle: String = "Natural", geminiAuth: String = "apiKey", economy: Bool = true, fishVoice: FishVoice = .simonne) {
         let provider = ["gemini", "voicebox", "fish"].contains(provider) ? provider : "fish"
         let spoken=VoiceBoxClient.speechText(text)
         guard !spoken.isEmpty else{return}
-        let speechKey=[provider,identifier ?? "",server,profile ?? "",geminiVoice,geminiModel,geminiStyle,String(speed),spoken].joined(separator:"|")
+        let speechKey=[provider,fishVoice.rawValue,identifier ?? "",server,profile ?? "",geminiVoice,geminiModel,geminiStyle,String(speed),spoken].joined(separator:"|")
         if currentSpokenText==speechKey,(speaking || preparingSpeech){return}
         stop(); stopSpeaking(); claimPlayback(); currentSpokenText=speechKey; speechError = nil
         if (provider == "gemini" || provider == "fish"), !preview {
-            beginStreamingReply(voice: geminiVoice, model: geminiModel, style: geminiStyle, auth: geminiAuth, speed: speed, economy: economy, provider: provider)
+            beginStreamingReply(voice: geminiVoice, model: geminiModel, style: geminiStyle, auth: geminiAuth, speed: speed, economy: economy, provider: provider, fishVoice: fishVoice)
             currentSpokenText=speechKey
             updateStreamingReply(text, final: true)
             return
         }
         if provider == "voicebox" || provider == "gemini" || provider == "fish" {
             let token = UUID(); playbackID = token; preparingSpeech = true
-            let cacheKey = "\(provider)|\(server)|\(profile ?? "")|\(speed)|\(geminiVoice)|\(geminiModel)|\(geminiStyle)|\(geminiAuth)|\(text)"
+            let cacheKey = "\(provider)|\(fishVoice.rawValue)|\(server)|\(profile ?? "")|\(speed)|\(geminiVoice)|\(geminiModel)|\(geminiStyle)|\(geminiAuth)|\(text)"
             speechTask = Task { [weak self] in
                 guard let self else { return }
                 do {
                     let bytes: Data
                     if preview, let cached = self.previewCache[cacheKey] { bytes = cached }
-                    else if provider == "fish" { bytes = try await FishSpeechClient.audio(text: spoken) }
+                    else if provider == "fish" { bytes = try await FishSpeechClient.audio(text: spoken, voice: fishVoice) }
                     else if provider == "gemini" {
                         guard Date() >= self.speechQuotaUntil else { throw IrisFailure.message("Gemini speech is temporarily paused after a quota error. Text replies still work; try speech later.") }
                         bytes = try await GeminiSpeechService.audio(text: text, voice: geminiVoice, model: geminiModel, style: geminiStyle, auth: geminiAuth) }

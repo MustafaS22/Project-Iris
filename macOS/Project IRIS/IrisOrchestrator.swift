@@ -13,6 +13,7 @@ final class IrisOrchestrator: ObservableObject {
     @Published var floatingActive = false
     @Published var floatingReply = ""
     var openFloating: (() -> Void)?
+    var openFloatingPreview: (() -> Void)?
     var openFloatingTyping: (() -> Void)?
     var prepareFloatingContext: ((String) async throws -> AttachedContext?)?
     @Published var tab: NotchTab = .focus
@@ -338,7 +339,7 @@ final class IrisOrchestrator: ObservableObject {
         let referenceExplanation = floatingRequest && (DiagramReference.wantsOnline(text) || shared.contains { $0.note?.hasPrefix("diagram-reference:") == true })
         let streamSpeech = !referenceExplanation && ["gemini", "fish"].contains(preferences.speechProvider) && (preferences.streamSpokenReplies ?? true) && shouldSpeak
         if streamSpeech {
-            voice.beginStreamingReply(voice: preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, model: preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, style: preferences.replySpeechStyle, auth: preferences.geminiSpeechAuth ?? "apiKey", speed: preferences.geminiSpeechSpeed ?? 1, economy: preferences.geminiSpeechEconomy ?? true, provider: preferences.speechProvider)
+            voice.beginStreamingReply(voice: preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, model: preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, style: preferences.replySpeechStyle, auth: preferences.geminiSpeechAuth ?? "apiKey", speed: preferences.geminiSpeechSpeed ?? 1, economy: preferences.geminiSpeechEconomy ?? true, provider: preferences.speechProvider, fishVoice: preferences.selectedFishVoice)
         }
         var sharedScreen = false
         var lastUpdate = Date.distantPast
@@ -447,7 +448,7 @@ final class IrisOrchestrator: ObservableObject {
                 if visualPlan { self.voice.stopSpeaking() }
                 else if streamSpeech { self.voice.updateStreamingReply(visible, final: true); if floatingRequest && self.floatingActive && self.voice.speechError != nil { self.reportFloatingSpeechFailure() } }
                 else if shouldSpeak && (!floatingRequest || self.floatingActive) {
-                    self.voice.speak((floatingRequest || plan == nil) ? visible : ((self.preferences.alwaysAllowComputerActions ?? false) ? "I’m preparing the requested action." : "I’ve prepared an action for you to review."), identifier: self.preferences.voiceID, rate: self.preferences.speechRate ?? 0.49, provider: self.preferences.speechProvider, server: self.preferences.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: self.preferences.voiceBoxProfile, speed: (self.preferences.speechProvider) == "gemini" ? (self.preferences.geminiSpeechSpeed ?? 1) : (self.preferences.voiceBoxSpeed ?? 1), geminiVoice: self.preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: self.preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: self.preferences.replySpeechStyle, geminiAuth: self.preferences.geminiSpeechAuth ?? "apiKey", economy: self.preferences.geminiSpeechEconomy ?? true)
+                    self.voice.speak((floatingRequest || plan == nil) ? visible : ((self.preferences.alwaysAllowComputerActions ?? false) ? "I’m preparing the requested action." : "I’ve prepared an action for you to review."), identifier: self.preferences.voiceID, rate: self.preferences.speechRate ?? 0.49, provider: self.preferences.speechProvider, server: self.preferences.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: self.preferences.voiceBoxProfile, speed: (self.preferences.speechProvider) == "gemini" ? (self.preferences.geminiSpeechSpeed ?? 1) : (self.preferences.voiceBoxSpeed ?? 1), geminiVoice: self.preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: self.preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: self.preferences.replySpeechStyle, geminiAuth: self.preferences.geminiSpeechAuth ?? "apiKey", economy: self.preferences.geminiSpeechEconomy ?? true, fishVoice: self.preferences.selectedFishVoice)
                 }
                 self.spokenRequest = false
                 self.welcome.receiveActualReply(visible)
@@ -625,7 +626,7 @@ final class IrisOrchestrator: ObservableObject {
     }
     func previewPersonality(_ personality: IrisPersonality, text: String) {
         guard !busy, !voice.listening, !voice.requesting else { return }
-        voice.speak(text, identifier: preferences.voiceID, rate: preferences.speechRate ?? 0.49, provider: preferences.speechProvider, server: preferences.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: preferences.voiceBoxProfile, speed: (preferences.speechProvider) == "gemini" ? (preferences.geminiSpeechSpeed ?? 1) : (preferences.voiceBoxSpeed ?? 1), preview: true, geminiVoice: preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: preferences.personalityID != nil && (preferences.personalityVoiceTone ?? true) ? personality.delivery : (preferences.geminiSpeechStyle ?? "Natural"), geminiAuth: preferences.geminiSpeechAuth ?? "apiKey", economy: preferences.geminiSpeechEconomy ?? true)
+        voice.speak(text, identifier: preferences.voiceID, rate: preferences.speechRate ?? 0.49, provider: preferences.speechProvider, server: preferences.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: preferences.voiceBoxProfile, speed: (preferences.speechProvider) == "gemini" ? (preferences.geminiSpeechSpeed ?? 1) : (preferences.voiceBoxSpeed ?? 1), preview: true, geminiVoice: preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: preferences.personalityID != nil && (preferences.personalityVoiceTone ?? true) ? personality.delivery : (preferences.geminiSpeechStyle ?? "Natural"), geminiAuth: preferences.geminiSpeechAuth ?? "apiKey", economy: preferences.geminiSpeechEconomy ?? true, fishVoice: preferences.selectedFishVoice)
     }
     func reportFloatingSpeechFailure() {
         guard floatingActive, !floatingReply.isEmpty else { return }
@@ -634,7 +635,7 @@ final class IrisOrchestrator: ObservableObject {
     func speakFloatingReply(_ text: String) {
         guard floatingActive else { return }
         floatingReply = text
-        voice.speak(text, identifier: preferences.voiceID, rate: preferences.speechRate ?? 0.49, provider: preferences.speechProvider, server: preferences.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: preferences.voiceBoxProfile, speed: (preferences.speechProvider) == "gemini" ? (preferences.geminiSpeechSpeed ?? 1) : (preferences.voiceBoxSpeed ?? 1), geminiVoice: preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: preferences.replySpeechStyle, geminiAuth: preferences.geminiSpeechAuth ?? "apiKey", economy: preferences.geminiSpeechEconomy ?? true)
+        voice.speak(text, identifier: preferences.voiceID, rate: preferences.speechRate ?? 0.49, provider: preferences.speechProvider, server: preferences.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: preferences.voiceBoxProfile, speed: (preferences.speechProvider) == "gemini" ? (preferences.geminiSpeechSpeed ?? 1) : (preferences.voiceBoxSpeed ?? 1), geminiVoice: preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: preferences.replySpeechStyle, geminiAuth: preferences.geminiSpeechAuth ?? "apiKey", economy: preferences.geminiSpeechEconomy ?? true, fishVoice: preferences.selectedFishVoice)
     }
     func listenFromFloating() {
         if welcome.active, welcome.progress.stage != .explore { welcome.listen(); return }

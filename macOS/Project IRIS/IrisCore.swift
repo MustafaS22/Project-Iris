@@ -21,6 +21,13 @@ enum KnowledgeSource: String, Codable, CaseIterable {
     static let modelProviders: [Self] = [.openAI, .gemini, .local]
 }
 
+enum FishVoice: String, CaseIterable, Identifiable {
+    case simonne, ananya, tamanna
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
 struct Preferences: Codable, Equatable {
     var memoryEnabled: Bool?
     var personalityID: String?
@@ -39,6 +46,8 @@ struct Preferences: Codable, Equatable {
     var geminiSpeechSpeed: Double?
     var speechRecognitionProvider: String?
     var voiceProvider: String?
+    var fishVoice: String?
+    var selectedFishVoice: FishVoice { FishVoice(rawValue: fishVoice ?? "") ?? .simonne }
     var speechProvider: String {
         guard let provider = voiceProvider, ["gemini", "voicebox"].contains(provider) else { return "fish" }
         return provider

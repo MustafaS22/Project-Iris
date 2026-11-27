@@ -100,7 +100,7 @@ import Combine
         guard voiceEnabled, active, let iris else { return }
         spoke = false; iris.voice.stop(); iris.voice.stopSpeaking()
         let p = iris.preferences
-        iris.voice.speak(text, identifier: p.voiceID, rate: p.speechRate ?? 0.49, provider: p.speechProvider, server: p.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: p.voiceBoxProfile, speed: (p.speechProvider) == "gemini" ? (p.geminiSpeechSpeed ?? 1) : (p.voiceBoxSpeed ?? 1), geminiVoice: p.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: p.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: p.replySpeechStyle, geminiAuth: p.geminiSpeechAuth ?? "apiKey", economy: p.geminiSpeechEconomy ?? true)
+        iris.voice.speak(text, identifier: p.voiceID, rate: p.speechRate ?? 0.49, provider: p.speechProvider, server: p.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: p.voiceBoxProfile, speed: (p.speechProvider) == "gemini" ? (p.geminiSpeechSpeed ?? 1) : (p.voiceBoxSpeed ?? 1), geminiVoice: p.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: p.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: p.replySpeechStyle, geminiAuth: p.geminiSpeechAuth ?? "apiKey", economy: p.geminiSpeechEconomy ?? true, fishVoice: p.selectedFishVoice)
     }
     private func scheduleListening() {
         microphoneTask?.cancel(); let id = ticket

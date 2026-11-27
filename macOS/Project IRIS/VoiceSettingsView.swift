@@ -23,8 +23,15 @@ struct VoiceSettingsView: View {
             }
             if provider == "fish" {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Simonne · Fish Audio").font(.headline)
-                    Text("A shared voice for Iris. Your reply text is sent to Fish Audio through AriZe’s voice service. An internet connection is required.").foregroundStyle(IrisDesign.secondary)
+                    IrisPicker("Voice", selection: Binding(
+                        get: { iris.preferences.selectedFishVoice },
+                        set: { voice in
+                            iris.voice.stopSpeaking()
+                            iris.voice.speechError = nil
+                            iris.setPreference { $0.fishVoice = voice.rawValue }
+                        }
+                    ), options: FishVoice.allCases.map { .init(value: $0, title: $0.title) })
+                    Text("Reply text is sent to Fish Audio through AriZe’s voice service. An internet connection is required.").foregroundStyle(IrisDesign.secondary)
                     Text("No API key needed. Shared usage limits apply. If the free service is unavailable, Iris keeps your text reply.").font(.caption).foregroundStyle(IrisDesign.secondary)
                 }
             }
@@ -109,7 +116,7 @@ struct VoiceSettingsView: View {
         catch { connectionError = error.localizedDescription; profiles = [] }
     }
     private func preview(_ profile: String?) {
-        iris.voice.speak("Hi, I'm Iris. What can I help with?", identifier: iris.preferences.voiceID, rate: iris.preferences.speechRate ?? 0.49, provider: provider, server: iris.preferences.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: profile, speed: provider == "gemini" ? (iris.preferences.geminiSpeechSpeed ?? 1) : (iris.preferences.voiceBoxSpeed ?? 1), preview: true, geminiVoice: iris.preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: iris.preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: iris.preferences.geminiSpeechStyle ?? "Natural", geminiAuth: iris.preferences.geminiSpeechAuth ?? "apiKey")
+        iris.voice.speak("Hi, I'm Iris. What can I help with?", identifier: iris.preferences.voiceID, rate: iris.preferences.speechRate ?? 0.49, provider: provider, server: iris.preferences.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: profile, speed: provider == "gemini" ? (iris.preferences.geminiSpeechSpeed ?? 1) : (iris.preferences.voiceBoxSpeed ?? 1), preview: true, geminiVoice: iris.preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: iris.preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: iris.preferences.geminiSpeechStyle ?? "Natural", geminiAuth: iris.preferences.geminiSpeechAuth ?? "apiKey", fishVoice: iris.preferences.selectedFishVoice)
     }
     private func openVoiceBox() {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "sh.voicebox.app") ?? ["/Applications/Voicebox.app", "/Applications/VoiceBox.app"].map({ URL(fileURLWithPath: $0) }).first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
