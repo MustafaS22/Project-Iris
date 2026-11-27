@@ -39,7 +39,9 @@ import SwiftUI
             iris.draft = "@gmail summarize the retreat"; iris.ask()
             try require(iris.messages.count == count && iris.error != nil, "A disabled source was submitted")
             iris.error = nil; iris.draft = "@image A friendly yellow robot"; iris.ask()
-            try require(iris.actions.pending.first?.type == "generateImage" && !iris.busy, "Image didn't stop at the billing review")
+            try require(iris.busy && iris.activeCreation == .image && iris.actions.pending.isEmpty, "Explicit image request did not start directly")
+            iris.cancelModel()
+            try require(!iris.busy && iris.activeCreation == nil, "Canceled image did not clear generation progress")
             try require(Set((iris.data.createdItems ?? []).compactMap { $0.file?.id }).isSuperset(of: [website.id, pdf.id]), "Creations did not reach Library")
             let completedMessages = iris.messages
             iris.newConversation(); iris.data.conversations = []
@@ -78,7 +80,7 @@ import SwiftUI
             try await snapshot(AssistantSettingsView(iris: iris, initialSection: "Connections").background(IrisDesign.canvas).preferredColorScheme(.dark), name: "connections", size: .init(width: 920, height: 740))
             iris.workspaceSection = .library
             try await snapshot(ContentView(iris: iris), name: "library", size: .init(width: 1220, height: 820))
-            try Data("PASS: website HTML, PDF bytes, Library persistence, flashcard contract, disabled-source rejection, paid-image review. Eight native snapshots written.\n".utf8).write(to: output.appendingPathComponent("result.txt"))
+            try Data("PASS: website HTML, PDF bytes, Library persistence, flashcard contract, disabled-source rejection, direct image start and cancel. Eight native snapshots written.\n".utf8).write(to: output.appendingPathComponent("result.txt"))
         } catch { try? Data(("FAIL: " + error.localizedDescription).utf8).write(to: output.appendingPathComponent("result.txt")) }
         NSApp.terminate(nil)
     }

@@ -95,6 +95,6 @@ final class FloatingMotionTests: XCTestCase {
     }
     func testGuidanceOnlyChangesOurOverlayNotComputerPermissionPolicy() {
         for kind in ["guideControl","focusControl"] { XCTAssertTrue(ActionPolicy.mayRunAutomatically(.init(type:kind,target:"snapshot-A1"),enabled:false)) }
-        XCTAssertFalse(ActionPolicy.mayRunAutomatically(.init(type:"openApplication",target:"Safari"),enabled:false))
+        XCTAssertFalse(ActionPolicy.mayRunAutomatically(.init(type:"writeFile"),enabled:false))
     }
 }

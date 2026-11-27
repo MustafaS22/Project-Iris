@@ -60,18 +60,7 @@ struct ComputerAutonomySettings: View {
         VStack(alignment:.leading,spacing:16) {
             Text("Computer use").font(.headline)
             IrisPicker("Execution mode",selection:$session.policy.mode,options:ComputerMode.allCases.map{.init(value:$0,title:$0.rawValue)})
-            Text("Observe inspects without acting. Assist reviews task startup. Autonomous starts explicit @computer requests and agents’ delegated computer tasks automatically. Assist lets you grant routine actions for one task or remember the category. Autonomous handles recognized routine actions automatically. Ambiguous targets, consequential actions, file changes and external tools require review. Excluded apps and individual tool permissions always apply.").font(.callout).foregroundStyle(IrisDesign.secondary)
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Remembered approvals").font(.subheadline.weight(.semibold))
-                Text("Applies to recognized routine actions in Assist mode. Sensitive actions still need individual approval.")
-                    .font(.caption).foregroundStyle(IrisDesign.secondary)
-                ForEach(ComputerApprovalCategory.allCases, id: \.self) { category in
-                    Toggle(category.title, isOn: Binding(
-                        get: { session.policy.rememberedApprovals?.contains(category) ?? false },
-                        set: { session.policy.remember(category, allowed: $0) }
-                    )).toggleStyle(.switch)
-                }
-            }
+            Text("Observe inspects without acting. Assist and Autonomous handle routine navigation and local drafting directly. Autonomous also allows agents to delegate computer tasks. Sensitive actions and external tools may ask for approval. Excluded apps and tool permissions apply in every mode.").font(.callout).foregroundStyle(IrisDesign.secondary)
             Toggle("Allow task screenshots to be shared with my AI",isOn:$session.policy.shareScreen).toggleStyle(.switch)
             Text("Off by default. Images can be captured at task start or when the interface needs visual inspection. Iris holds them in memory until the task ends. Password controls and excluded apps are blocked when detectable. AX labels, OCR and approved file text can also be sent to your selected AI. Escape stops the task; manual clicks, typing and scrolling invalidate pending actions and trigger a fresh observation after you finish. Mouse movement alone does not interrupt Iris.").font(.caption).foregroundStyle(IrisDesign.secondary)
             Button("Exclude an application…") {

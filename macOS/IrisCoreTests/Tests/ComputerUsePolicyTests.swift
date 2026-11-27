@@ -14,20 +14,15 @@ final class ComputerUsePolicyTests: XCTestCase {
         XCTAssertFalse(p.permitsRoutineAction("press_key",role:"",label:"",bundle:"com.apple.Safari",key:"return"))
         XCTAssertFalse(p.permitsRoutineAction("press_key",role:"",label:"",bundle:"com.apple.Safari",key:"tab",modifiers:["command"]))
     }
-    func testScopedApprovalAndRevocation() throws {
-        var policy = ComputerUsePolicy()
-        XCTAssertTrue(policy.requiresReview("scroll", external: false, routine: true, category: .navigation, taskApproved: false))
-        XCTAssertFalse(policy.requiresReview("scroll", external: false, routine: true, category: .navigation, taskApproved: true))
-        policy.remember(.navigation, allowed: true)
-        policy = try JSONDecoder().decode(ComputerUsePolicy.self, from: JSONEncoder().encode(policy))
-        XCTAssertFalse(policy.requiresReview("scroll", external: false, routine: true, category: .navigation, taskApproved: false))
-        XCTAssertTrue(policy.requiresReview("type_text", external: false, routine: true, category: .localDrafting, taskApproved: false))
-        XCTAssertTrue(policy.requiresReview("press_key", external: false, routine: false, category: .navigation, taskApproved: true))
-        XCTAssertTrue(policy.requiresReview("scroll", external: true, routine: true, category: .navigation, taskApproved: true))
-        policy.remember(.navigation, allowed: false)
-        XCTAssertTrue(policy.requiresReview("scroll", external: false, routine: true, category: .navigation, taskApproved: false))
-        policy.mode = .autonomous
-        XCTAssertFalse(policy.requiresReview("scroll", external: false, routine: true, category: .navigation, taskApproved: false))
+    func testRoutineNativeActionsSkipReviewButExternalAndSensitiveActionsStillAsk() {
+        for mode in [ComputerMode.assist, .autonomous] {
+            var policy = ComputerUsePolicy()
+            policy.mode = mode
+            XCTAssertFalse(policy.requiresReview("scroll", external: false, routine: true, category: .navigation, taskApproved: false))
+            XCTAssertFalse(policy.requiresReview("type_text", external: false, routine: true, category: .localDrafting, taskApproved: false))
+            XCTAssertTrue(policy.requiresReview("press_key", external: false, routine: false, category: nil, taskApproved: false))
+            XCTAssertTrue(policy.requiresReview("scroll", external: true, routine: true, category: nil, taskApproved: false))
+        }
     }
 
     func testLegacyPolicyHasNoRememberedApprovals() throws {

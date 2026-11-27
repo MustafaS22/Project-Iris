@@ -26,6 +26,7 @@ final class IrisOrchestrator: ObservableObject {
     private var conversationID = UUID()
     @Published var activeStudioSkill: StudioSkill?
     @Published var studioReferences: [AttachedContext] = []
+    @Published private(set) var activeCreation: ChatCreationKind?
     @Published var liveReply = ""
     @Published var requestPhase = ""
     @Published var requestStarted = Date()
@@ -293,8 +294,7 @@ final class IrisOrchestrator: ObservableObject {
             guard !computer.running, !agents.computerBusy else { error = "A computer task is already active. Stop it before starting another."; return }
             messages.append(.init(role: "user", text: typed)); draft = ""
             let action = AssistantAction(type:"computerTask",target:text)
-            if computer.policy.mode == .autonomous && !busy { perform(action,automatic:true) }
-            else { queueActions([action]) }
+            perform(action)
             return
         }
         if shared.isEmpty, mention.creation == nil, mention.connectors.isEmpty, let fact = MemoryPolicy.explicitFact(text) {
@@ -305,7 +305,7 @@ final class IrisOrchestrator: ObservableObject {
             if floatingActive { speakFloatingReply(confirmation) }
             return
         }
-        if !computer.running, mention.creation != .image, AgentPolicy.shouldDeploy(text, explicit: mention.agent, contextual: !shared.isEmpty || !mention.connectors.isEmpty),
+        if !computer.running, mention.creation == nil, AgentPolicy.shouldDeploy(text, explicit: mention.agent, contextual: !shared.isEmpty || !mention.connectors.isEmpty),
            mention.agent || !floatingActive || !ScreenQuestionPolicy.wantsSnapshot(text) {
             do { try deployAgent(mention: mention, task: mention.text, typed: typed, shared: shared, origin: conversationID) }
             catch { self.error = error.localizedDescription }
@@ -321,6 +321,7 @@ final class IrisOrchestrator: ObservableObject {
             playDiagram(entry, narrate: narrate); return
         }
         if mention.creation == .image {
+            guard !computer.running, !agents.computerBusy else { error = "Stop the active computer task before generating an image."; return }
             guard !attachments.contains(where: { $0.image != nil }) else { error = "@image generates from a text brief. Describe the image you want, or remove @image to discuss an attached image."; return }
             let sourceText = mention.connectors.isEmpty ? "" : knowledge.context(for: text, only: mention.connectors)
             let prompt: String
@@ -332,11 +333,11 @@ final class IrisOrchestrator: ObservableObject {
             }
             messages.append(.init(role: "user", text: typed, files: attachments.compactMap(\.file)))
             draft = ""; attachments = []
-            queueActions([.init(type: "generateImage", folder: ChatCreationFiles.folderID, path: ChatCreationFiles.filename(prompt: text, kind: .image), content: prompt)])
-            messages.append(.init(role: "assistant", text: "Review the image prompt and provider below. The finished PNG will appear here and in Library."))
+            perform(.init(type: "generateImage", folder: ChatCreationFiles.folderID, path: ChatCreationFiles.filename(prompt: text, kind: .image), content: prompt))
             return
         }
         messages.append(.init(role: "user", text: typed.isEmpty ? text : typed, files: attachments.compactMap(\.file))); draft = ""; busy = true
+        activeCreation = mention.creation
         let currentRequest = UUID(); requestID = currentRequest
         liveReply = ""; requestStarted = Date(); requestPhase = "Connecting to \(preferences.source.rawValue)"
         let floatingRequest = floatingActive
@@ -354,7 +355,7 @@ final class IrisOrchestrator: ObservableObject {
             if raw.isEmpty { self.requestPhase = "Waiting for the response"; return }
             guard Date().timeIntervalSince(lastUpdate) >= 0.12 else { return }
             lastUpdate = Date()
-            let publicText = mention.creation == .website ? "Building your website…" : StreamingPresentation.visibleText(raw)
+            let publicText = mention.creation == nil ? StreamingPresentation.visibleText(raw) : ""
             self.liveReply = publicText
             if streamSpeech && !sharedScreen && mention.creation == nil { self.voice.updateStreamingReply(raw) }
             self.requestPhase = StreamingPresentation.status(for: raw, visible: publicText)
@@ -444,17 +445,17 @@ final class IrisOrchestrator: ObservableObject {
                         throw error
                     }
                 }
-                if visible.isEmpty { visible = plan == nil ? "I couldn't prepare that action. Please try again." : ((self.preferences.alwaysAllowComputerActions ?? false) ? "I’m preparing the requested action." : "I’ve prepared an action for you to review.") }
+                if visible.isEmpty { visible = plan == nil ? "I couldn't prepare that action. Please try again." : ((plan?.first.map { ActionPolicy.mayRunAutomatically($0, enabled: self.preferences.alwaysAllowComputerActions ?? false) } ?? false) ? "I’m preparing the requested action." : "I’ve prepared an action for you to review.") }
                 if live.hasWeather, !visible.contains("open-meteo.com") { visible += "\n\n[Weather source: Open-Meteo](https://open-meteo.com/)" }
                 if self.floatingActive { self.floatingReply = visible }
                 self.messages.append(.init(role: "assistant", text: visible, files: createdFiles.isEmpty ? nil : createdFiles))
                 self.attachments = []
-                self.liveReply = ""; self.requestPhase = ""; self.requestID = nil; self.busy = false
+                self.liveReply = ""; self.requestPhase = ""; self.requestID = nil; self.activeCreation = nil; self.busy = false
                 let visualPlan = floatingRequest && (plan?.contains { ["drawOnScreen", "guideControl", "focusControl"].contains($0.type) } ?? false)
                 if visualPlan { self.voice.stopSpeaking() }
                 else if streamSpeech { self.voice.updateStreamingReply(visible, final: true); if floatingRequest && self.floatingActive && self.voice.speechError != nil { self.reportFloatingSpeechFailure() } }
                 else if shouldSpeak && (!floatingRequest || self.floatingActive) {
-                    self.voice.speak((floatingRequest || plan == nil) ? visible : ((self.preferences.alwaysAllowComputerActions ?? false) ? "I’m preparing the requested action." : "I’ve prepared an action for you to review."), identifier: self.preferences.voiceID, rate: self.preferences.speechRate ?? 0.49, provider: self.preferences.speechProvider, server: self.preferences.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: self.preferences.voiceBoxProfile, speed: (self.preferences.speechProvider) == "gemini" ? (self.preferences.geminiSpeechSpeed ?? 1) : (self.preferences.voiceBoxSpeed ?? 1), geminiVoice: self.preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: self.preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: self.preferences.replySpeechStyle, geminiAuth: self.preferences.geminiSpeechAuth ?? "apiKey", economy: self.preferences.geminiSpeechEconomy ?? true, fishVoice: self.preferences.selectedFishVoice)
+                    self.voice.speak((floatingRequest || plan == nil) ? visible : ((plan?.first.map { ActionPolicy.mayRunAutomatically($0, enabled: self.preferences.alwaysAllowComputerActions ?? false) } ?? false) ? "I’m preparing the requested action." : "I’ve prepared an action for you to review."), identifier: self.preferences.voiceID, rate: self.preferences.speechRate ?? 0.49, provider: self.preferences.speechProvider, server: self.preferences.voiceBoxServer ?? VoiceBoxClient.defaultServer, profile: self.preferences.voiceBoxProfile, speed: (self.preferences.speechProvider) == "gemini" ? (self.preferences.geminiSpeechSpeed ?? 1) : (self.preferences.voiceBoxSpeed ?? 1), geminiVoice: self.preferences.geminiVoice ?? GeminiSpeechClient.defaultVoice, geminiModel: self.preferences.geminiSpeechModel ?? GeminiSpeechClient.defaultModel, geminiStyle: self.preferences.replySpeechStyle, geminiAuth: self.preferences.geminiSpeechAuth ?? "apiKey", economy: self.preferences.geminiSpeechEconomy ?? true, fishVoice: self.preferences.selectedFishVoice)
                 }
                 self.spokenRequest = false
                 self.welcome.receiveActualReply(visible)
@@ -462,7 +463,7 @@ final class IrisOrchestrator: ObservableObject {
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 if !self.liveReply.isEmpty { self.messages.append(.init(role: "assistant", text: self.liveReply + "\n\n_Response interrupted._")) }
-                self.liveReply = ""; self.requestPhase = ""; self.requestID = nil
+                self.liveReply = ""; self.requestPhase = ""; self.requestID = nil; self.activeCreation = nil
                 if self.draft.isEmpty { self.draft = typed }
                 self.voice.stopSpeaking()
                 self.error = "The response was interrupted. \(error.localizedDescription)"; self.busy = false; self.spokenRequest = false; self.welcome.receiveActualFailure(error.localizedDescription)
@@ -510,7 +511,7 @@ final class IrisOrchestrator: ObservableObject {
         voice.stopSpeaking()
         requestID = nil; modelTask?.cancel(); modelTask = nil; actionTask?.cancel(); actionTask = nil
         if !liveReply.isEmpty { messages.append(.init(role: "assistant", text: liveReply + "\n\n_Response stopped._")) }
-        liveReply = ""; requestPhase = ""; busy = false; spokenRequest = false
+        liveReply = ""; requestPhase = ""; activeCreation = nil; busy = false; spokenRequest = false
         notice = "Request stopped. You can edit and send again."
     }
     func testConnection() { refreshConnection(immediate: true) }
@@ -717,6 +718,8 @@ final class IrisOrchestrator: ObservableObject {
         guard !computer.running else { notice = "Pause or stop the active computer task first."; return }
         guard !busy, !agents.computerBusy else { notice = "An agent is using the computer. Try this action when it finishes."; return }
         let batch = automatic ? actions.pending : [action]
+        error = nil
+        activeCreation = action.type == "generateImage" ? .image : action.type == "createDocument" ? .document : nil
         busy = true; requestStarted = Date(); requestPhase = action.displayName; liveReply = ""
         actionTask = Task {
             var succeeded = false
@@ -724,9 +727,13 @@ final class IrisOrchestrator: ObservableObject {
                 for next in batch {
                     try Task.checkCancellation()
                     if automatic && !ActionPolicy.mayRunAutomatically(next, enabled: preferences.alwaysAllowComputerActions ?? false) { break }
+                    activeCreation = next.type == "generateImage" ? .image : next.type == "createDocument" ? .document : nil
                     requestPhase = next.displayName
                     let outcome = try await actions.execute(next)
                     guard !Task.isCancelled else { return }
+                    if next.type == "generateImage", let file = actions.producedFiles.first {
+                        recordCreation(title: file.name, kind: ChatCreationKind.image.rawValue, file: file)
+                    }
                     if next.type == "readFile" || next.type == "listFiles" {
                         actions.result = outcome
                         messages.append(.init(role: "assistant", text: "Read locally. Open a file below, or attach its text if you want to send it to your model.", files: actions.producedFiles))
@@ -740,7 +747,7 @@ final class IrisOrchestrator: ObservableObject {
                 succeeded = true
             } catch { if !Task.isCancelled { self.error = error.localizedDescription; if floatingActive { speakFloatingReply("That action couldn’t finish. " + error.localizedDescription) } } }
             if !Task.isCancelled {
-                busy = false; requestPhase = ""; actionTask = nil
+                activeCreation = nil; busy = false; requestPhase = ""; actionTask = nil
                 if succeeded && !automatic { runAutomaticActions() }
             }
         }

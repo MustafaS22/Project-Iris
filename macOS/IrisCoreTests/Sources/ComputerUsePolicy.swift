@@ -27,9 +27,6 @@ struct ComputerUsePolicy: Codable {
 
     func requiresReview(_ name: String, external: Bool, routine: Bool, category: ComputerApprovalCategory?, taskApproved: Bool) -> Bool {
         if external { return true }
-        if let category, mode == .assist, routine {
-            return !taskApproved && !(rememberedApprovals?.contains(category) ?? false)
-        }
         return needsApproval(name, external: false) && !routine
     }
 

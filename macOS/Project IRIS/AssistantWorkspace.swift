@@ -61,7 +61,7 @@ struct AssistantHome: View {
                         }
                         if iris.busy { LiveResponseView(iris: iris) }
                     }.padding(.vertical, 8)
-                }.onChange(of: iris.liveReply) { _, _ in proxy.scrollTo("live-response", anchor: .bottom) }.onChange(of: iris.messages.count) { _, _ in if let last = iris.messages.last { proxy.scrollTo(last.id, anchor: .bottom) } }
+                }.onChange(of: iris.activeCreation) { _, kind in if kind != nil { proxy.scrollTo("live-response", anchor: .bottom) } }.onChange(of: iris.liveReply) { _, _ in proxy.scrollTo("live-response", anchor: .bottom) }.onChange(of: iris.messages.count) { _, _ in if let last = iris.messages.last { proxy.scrollTo(last.id, anchor: .bottom) } }
             }.frame(minHeight: 0, maxHeight: .infinity).layoutPriority(1)
             ChatMentionComposer(iris: iris)
 

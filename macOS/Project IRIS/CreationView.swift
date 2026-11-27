@@ -125,9 +125,9 @@ struct CreationView: View {
                 Button("Grant folder…") { iris.actions.grant() }.buttonStyle(IrisActionStyle())
             }
             Text(ImageGenerationService.reviewDescription).font(.caption).foregroundStyle(IrisDesign.secondary)
-            Button("Review image generation", systemImage: "sparkles") { prepareImage() }.buttonStyle(IrisActionStyle(primary: true)).disabled(brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || folderID.isEmpty || iris.busy)
+            Button("Generate image", systemImage: "sparkles") { prepareImage() }.buttonStyle(IrisActionStyle(primary: true)).disabled(brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || folderID.isEmpty || iris.busy)
             if let imagePreview { Image(nsImage: imagePreview).resizable().scaledToFit().frame(maxHeight: 360).clipShape(RoundedRectangle(cornerRadius: 16)).frame(maxWidth: .infinity) }
-            if iris.busy { Label(iris.requestPhase, systemImage: "hourglass").font(.caption).foregroundStyle(IrisDesign.secondary); Button("Stop") { iris.cancelModel() } }
+            if iris.busy { LiveResponseView(iris: iris) }
             ActionReview(iris: iris)
             if !iris.actions.result.isEmpty { Text(iris.actions.result).font(.caption).foregroundStyle(IrisDesign.secondary) }
             DisclosureGroup("Image provider setup") { ImageProviderSettings().padding(.top, 16) }
@@ -140,7 +140,7 @@ struct CreationView: View {
             iris.newConversation(); iris.workspaceSection = .create
             let prompt = brief + (imageStyle == "As described" ? "" : "\nVisual style: " + imageStyle)
             iris.messages.append(.init(role: "user", text: "Generate an image: " + prompt))
-            iris.actions.pending = [.init(type: "generateImage", folder: folderID, path: path, content: prompt)]
+            iris.perform(.init(type: "generateImage", folder: folderID, path: path, content: prompt))
         } catch { iris.error = error.localizedDescription }
     }
     private func loadImage() {

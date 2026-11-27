@@ -217,7 +217,7 @@ struct NotchSurface: View {
                             if iris.busy { LiveResponseView(iris: iris, fontSize: 14) }
                         }
                     }.frame(maxHeight: 260)
-                    .onChange(of: iris.liveReply) { _, _ in proxy.scrollTo("live-response", anchor: .bottom) }
+                    .onChange(of: iris.activeCreation) { _, kind in if kind != nil { proxy.scrollTo("live-response", anchor: .bottom) } }.onChange(of: iris.liveReply) { _, _ in proxy.scrollTo("live-response", anchor: .bottom) }
                     .onChange(of: iris.messages.last?.text) { _, _ in if let id = iris.messages.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
                 }
             }

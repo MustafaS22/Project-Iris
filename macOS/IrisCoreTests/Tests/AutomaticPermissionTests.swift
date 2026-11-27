@@ -2,8 +2,13 @@ import XCTest
 @testable import IrisCore
 
 final class AutomaticPermissionTests: XCTestCase {
-    func testReviewModeNeverAutoRunsComputerActions() {
-        for type in ActionPolicy.types where !["drawOnScreen", "guideControl", "focusControl"].contains(type) { XCTAssertFalse(ActionPolicy.mayRunAutomatically(.init(type: type), enabled: false)) }
+    func testRoutineActionsStartWithoutAdditionalPermissions() {
+        for type in ["openApplication", "openURL", "searchWeb", "findFiles", "readFile", "playSpotifyPlaylist", "drawOnScreen"] {
+            XCTAssertTrue(ActionPolicy.mayRunAutomatically(.init(type: type), enabled: false), type)
+        }
+        for type in ["writeFile", "createDocument", "runProject", "generateImage", "computerTask"] {
+            XCTAssertFalse(ActionPolicy.mayRunAutomatically(.init(type: type), enabled: false), type)
+        }
     }
     func testAlwaysAllowCoversSupportedComputerActions() {
         for type in ActionPolicy.types.subtracting(["generateImage", "computerTask"]) { XCTAssertTrue(ActionPolicy.mayRunAutomatically(.init(type: type), enabled: true), type) }
@@ -13,7 +18,7 @@ final class AutomaticPermissionTests: XCTestCase {
         XCTAssertFalse(ActionPolicy.mayRunAutomatically(.init(type: "shell"), enabled: true))
         XCTAssertFalse(ActionPolicy.mayRunAutomatically(.init(type: "deleteFile"), enabled: true))
     }
-    func testExistingPreferencesDefaultToReviewAndChoicePersists() throws {
+    func testAdditionalPermissionsChoicePersists() throws {
         var preferences = Preferences()
         let old = try JSONEncoder().encode(preferences)
         XCTAssertNil(try JSONDecoder().decode(Preferences.self, from: old).alwaysAllowComputerActions)

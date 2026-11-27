@@ -24,7 +24,8 @@ enum ActionPolicy {
     static func mayRunAutomatically(_ action: AssistantAction, enabled: Bool) -> Bool {
         // Drawing only updates our own click-through overlay; computer actions retain their saved policy.
         // Separately billed media generation always keeps its explicit charge review.
-        ["drawOnScreen", "guideControl", "focusControl"].contains(action.type) || enabled && types.contains(action.type) && action.type != "generateImage" && action.type != "computerTask"
+        let routine = ["drawOnScreen", "guideControl", "focusControl", "openApplication", "openURL", "searchWeb", "listFiles", "readFile", "revealFile", "attachFile", "findFiles", "playSpotifyPlaylist", "startLMStudio", "createFolder"]
+        return routine.contains(action.type) || enabled && types.contains(action.type) && action.type != "generateImage" && action.type != "computerTask"
     }
     static func parse(_ reply: String) -> [AssistantAction]? {
         guard let start = reply.range(of: "```iris-actions"), let end = reply.range(of: "```", range: start.upperBound..<reply.endIndex) else { return nil }
