@@ -40,6 +40,7 @@ Open the desktop chat for a longer conversation, ask a quick question from the M
 | **macOS** | The main app for Apple Silicon Macs running macOS 15 or later. New versions are available in **Settings → Updates**. [Download for Mac](https://projectiris.lovelyabbey.chatgpt.site/download?platform=macos) |
 | **iPhone** | A separate companion preview for iOS 18 or later. [Installation guide](https://projectiris.lovelyabbey.chatgpt.site/iphone) · [Source](iOS/) |
 | **Windows** | An unsigned 1.0 test edition with a smaller feature set. [Download and details](https://projectiris.lovelyabbey.chatgpt.site/windows) · [Source](windows/) |
+| **Windows 2.0 candidate** | Native WinUI 3 source. Pending Windows runtime and installer verification. [Build and test](windows-native/README.md) |
 
 On Mac, open the DMG, drag Iris to Applications, and launch it from there. Onboarding walks through choosing your AI and voice providers, granting the permissions you want to use, and trying the notch, floating mode, and drafting.
 

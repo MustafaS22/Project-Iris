@@ -1,0 +1,190 @@
+<Window x:Class="Iris.Windows.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Iris">
+    <Grid x:Name="Shell" Background="#161515" RequestedTheme="Dark" Loaded="Start">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <NavigationView x:Name="Navigation" Grid.ColumnSpan="2" PaneDisplayMode="Left"
+            IsBackButtonVisible="Collapsed" IsSettingsVisible="False" IsPaneToggleButtonVisible="True"
+            OpenPaneLength="220" CompactPaneLength="54" SelectionChanged="Navigate">
+            <NavigationView.PaneHeader>
+                <StackPanel Margin="12,20,0,22" Orientation="Horizontal" Spacing="10">
+                    <Border Background="#080808" CornerRadius="10" Width="34" Height="30">
+                        <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Border Width="4" Height="9" CornerRadius="2" Background="{x:Bind Accent, Mode=OneWay}"/>
+                            <Border Width="4" Height="9" CornerRadius="2" Background="{x:Bind Accent, Mode=OneWay}"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Text="Iris" FontSize="22" FontWeight="SemiBold"/>
+                </StackPanel>
+            </NavigationView.PaneHeader>
+            <NavigationView.MenuItems>
+                <NavigationViewItem x:Name="ChatItem" Content="Chat" Icon="Message" Tag="chat"/>
+                <NavigationViewItem Content="Agents" Icon="People" Tag="agents"/>
+                <NavigationViewItem Content="Memory" Icon="Library" Tag="memory"/>
+                <NavigationViewItem Content="Computer" Icon="View" Tag="computer"/>
+                <NavigationViewItem x:Name="ImageItem" Content="Images" Icon="Pictures" Tag="images"/>
+                <NavigationViewItem Content="Connections" Icon="Link" Tag="mcp"/>
+                <NavigationViewItem Content="Settings" Icon="Setting" Tag="settings"/>
+            </NavigationView.MenuItems>
+            <NavigationView.PaneFooter>
+                <TextBlock Margin="14,6,8,12" Text="AriZe" Opacity=".58"/>
+            </NavigationView.PaneFooter>
+            <Grid Margin="28,20,28,20">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <InfoBar x:Name="Notice" IsOpen="False" IsClosable="True" Severity="Warning" Margin="0,0,0,10"/>
+                <Grid Grid.Row="1">
+                    <Grid x:Name="ChatPage">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <ComboBox x:Name="History" Header="Conversations" MaxWidth="340"
+                                      HorizontalAlignment="Left" MinWidth="180" DisplayMemberPath="Title" SelectionChanged="ChooseChat"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                                <Button Content="New" Click="NewChat"/>
+                                <Button Content="Delete" Click="DeleteChat" ToolTipService.ToolTip="Delete selected conversation"/>
+                            </StackPanel>
+                        </Grid>
+                        <Grid Grid.Row="1" Margin="0,18,0,14">
+                            <StackPanel x:Name="Greeting" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="15">
+                                <Border CornerRadius="27" Width="105" Height="85" Background="#080808">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Orientation="Horizontal" Spacing="10">
+                                        <Border x:Name="LeftEye" Height="24" Width="13" CornerRadius="6" Background="{x:Bind Accent, Mode=OneWay}"/>
+                                        <Border x:Name="RightEye" Height="24" Width="13" CornerRadius="6" Background="{x:Bind Accent, Mode=OneWay}"/>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Text="What are we untangling?" FontSize="26" TextAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                <TextBlock Text="Ask Iris, or bring a text file into the conversation." Opacity=".68" TextAlignment="Center" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <ScrollViewer x:Name="TranscriptScroll" Visibility="Collapsed" HorizontalScrollMode="Disabled">
+                                <StackPanel x:Name="Transcript" Spacing="12" Padding="0,5,8,4" />
+                            </ScrollViewer>
+                        </Grid>
+                        <Border Grid.Row="2" BorderBrush="#42403D" BorderThickness="1" Background="#23211F" CornerRadius="14" Padding="13">
+                            <StackPanel Spacing="10">
+                                <TextBox x:Name="Composer" MinHeight="58" MaxHeight="144" AcceptsReturn="True" TextWrapping="Wrap"
+                                         PlaceholderText="Message Iris…" AutomationProperties.Name="Message Iris"/>
+                                <StackPanel x:Name="AttachmentRow" Orientation="Horizontal" Spacing="9" Visibility="Collapsed">
+                                    <TextBlock x:Name="AttachmentLabel" TextWrapping="Wrap" Opacity=".75" VerticalAlignment="Center"/>
+                                    <Button Content="Remove" Click="RemoveAttachment" AutomationProperties.Name="Remove attachment"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="Attach text" Click="Attach"/>
+                                    <DropDownButton Content="Screen text">
+                                        <DropDownButton.Flyout>
+                                            <MenuFlyout>
+                                                <MenuFlyoutItem Text="Capture a window or display" Click="CaptureWindow"/>
+                                                <MenuFlyoutItem Text="Read a saved screenshot" Click="AttachScreenshot"/>
+                                            </MenuFlyout>
+                                        </DropDownButton.Flyout>
+                                    </DropDownButton>
+                                    <Button x:Name="VoiceButton" Content="Dictate" Click="Dictate" />
+                                    <Button x:Name="SendButton" Content="Send" Click="Send" Style="{ThemeResource AccentButtonStyle}"/>
+                                    <Button x:Name="StopButton" Content="Stop" Click="StopChat" IsEnabled="False"/>
+                                    <Button Content="Export" Click="ExportChat" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <ScrollViewer x:Name="AgentsPage" Visibility="Collapsed">
+                        <StackPanel Spacing="14" MaxWidth="760" HorizontalAlignment="Stretch">
+                            <TextBlock Text="Agents" FontSize="29" FontWeight="SemiBold"/>
+                            <TextBlock Text="Delegate a text-based task and keep chatting while Iris works." TextWrapping="Wrap" Opacity=".72"/>
+                            <TextBox x:Name="AgentObjective" PlaceholderText="Compare options, outline a plan, or draft a brief…" AutomationProperties.Name="Agent objective"/>
+                            <Button Content="Start agent" Click="StartAgent" Style="{ThemeResource AccentButtonStyle}"/>
+                            <StackPanel x:Name="AgentList" Spacing="10"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <ScrollViewer x:Name="MemoryPage" Visibility="Collapsed">
+                        <StackPanel Spacing="14" MaxWidth="760">
+                            <TextBlock Text="Memory" FontSize="29" FontWeight="SemiBold"/>
+                            <TextBlock Text="Save details Iris should remember. Matching entries are sent to the selected model with a related request." TextWrapping="Wrap" Opacity=".72"/>
+                            <TextBox x:Name="MemoryEntry" PlaceholderText="A preference, project detail, or goal" AutomationProperties.Name="Memory entry"/>
+                            <Button Content="Save memory" Click="SaveMemory"/>
+                            <StackPanel x:Name="MemoryList" Spacing="10"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <ScrollViewer x:Name="ComputerPage" Visibility="Collapsed">
+                        <StackPanel Spacing="14" MaxWidth="720">
+                            <TextBlock Text="Computer" FontSize="29" FontWeight="SemiBold"/>
+                            <TextBlock Text="Choose an app to open. Iris checks whether it reached the foreground and reports what it observed." TextWrapping="Wrap" Opacity=".72"/>
+                            <ComboBox x:Name="AppTargets" Header="Application"/>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button x:Name="OpenAppButton" Content="Open app" Click="OpenApp"/>
+                                <Button x:Name="StopDesktopButton" Content="Stop checking" Click="StopDesktop" IsEnabled="False"/>
+                            </StackPanel>
+                            <TextBlock x:Name="DesktopResult" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <ScrollViewer x:Name="ImagePage" Visibility="Collapsed">
+                        <StackPanel Spacing="14" MaxWidth="720" HorizontalAlignment="Stretch">
+                            <TextBlock Text="Images" FontSize="29" FontWeight="SemiBold"/>
+                            <TextBlock Text="Generate an image with Cloudflare Workers AI. Requests use your account’s quota or billing." TextWrapping="Wrap" Opacity=".72"/>
+                            <TextBox x:Name="ImagePrompt" PlaceholderText="Describe your image…" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="2048"/>
+                            <StackPanel Orientation="Horizontal" Spacing="9">
+                                <Button x:Name="GenerateButton" Content="Generate" Click="GenerateImage" Style="{ThemeResource AccentButtonStyle}"/>
+                                <Button x:Name="StopImageButton" Content="Stop" Click="StopImage" IsEnabled="False"/>
+                                <Button x:Name="SaveImageButton" Content="Save JPEG" Click="SaveImage" IsEnabled="False"/>
+                                <ProgressRing x:Name="ImageProgress" IsActive="False" Visibility="Collapsed" Width="24" Height="24"/>
+                            </StackPanel>
+                            <Image x:Name="GeneratedImage" MaxHeight="380" Stretch="Uniform" HorizontalAlignment="Left" AutomationProperties.Name="Generated image"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <ScrollViewer x:Name="McpPage" Visibility="Collapsed">
+                        <StackPanel Spacing="12" MaxWidth="720">
+                            <TextBlock Text="MCP connections" FontSize="29" FontWeight="SemiBold"/>
+                            <TextBlock Text="Connect to a trusted Streamable HTTP server. Iris shows the destination, tool and arguments before sending a call." TextWrapping="Wrap" Opacity=".72"/>
+                            <TextBox x:Name="McpAddress" Header="Server endpoint" PlaceholderText="https://example.com/mcp"/>
+                            <PasswordBox x:Name="McpToken" Header="Bearer token (optional, session only)"/>
+                            <StackPanel Orientation="Horizontal" Spacing="9">
+                                <Button x:Name="ConnectMcpButton" Content="Connect" Click="ConnectMcp"/>
+                                <Button x:Name="DisconnectMcpButton" Content="Disconnect" IsEnabled="False" Click="DisconnectMcp"/>
+                            </StackPanel>
+                            <ComboBox x:Name="McpTools" Header="Tool" SelectionChanged="SelectMcpTool"/>
+                            <TextBlock x:Name="McpDescription" TextWrapping="Wrap" IsTextSelectionEnabled="True" Opacity=".72"/>
+                            <TextBox x:Name="McpArguments" Header="JSON arguments" Text="{}" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="16000"/>
+                            <Button x:Name="CallMcpButton" Content="Review and call tool" Click="CallMcp" IsEnabled="False"/>
+                            <TextBlock x:Name="McpResult" TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <ScrollViewer x:Name="SettingsPage" Visibility="Collapsed">
+                        <StackPanel Spacing="18" MaxWidth="720">
+                            <TextBlock Text="Settings" FontSize="29" FontWeight="SemiBold"/>
+                            <TextBlock Text="Intelligence" FontSize="19" FontWeight="SemiBold"/>
+                            <ComboBox x:Name="Provider" Header="Chat provider" SelectionChanged="ProviderChanged">
+                                <ComboBoxItem Content="Local / OpenAI-compatible"/>
+                                <ComboBoxItem Content="OpenAI API"/>
+                                <ComboBoxItem Content="Gemini API"/>
+                            </ComboBox>
+                            <TextBox x:Name="EndpointField" Header="Local endpoint" PlaceholderText="http://127.0.0.1:1234/v1"/>
+                            <TextBox x:Name="ModelField" Header="Model ID"/>
+                            <PasswordBox x:Name="ApiKey" Header="API key" PlaceholderText="Leave empty to retain the saved key"/>
+                            <Button Content="Remove saved key for selected provider" Click="ClearKey"/>
+                            <TextBlock Text="Image generation" FontSize="19" FontWeight="SemiBold"/>
+                            <TextBox x:Name="CloudflareAccount" Header="Cloudflare Account ID"/>
+                            <PasswordBox x:Name="CloudflareToken" Header="Workers AI token"/>
+                            <Button Content="Remove saved Workers AI token" Click="ClearImageKey"/>
+                            <TextBlock Text="Appearance and presence" FontSize="19" FontWeight="SemiBold"/>
+                            <ComboBox x:Name="Theme" Header="Accent color">
+                                <ComboBoxItem Content="Apricot"/><ComboBoxItem Content="Lavender"/>
+                                <ComboBoxItem Content="Sage"/><ComboBoxItem Content="Ocean"/>
+                            </ComboBox>
+                            <ToggleSwitch x:Name="CapsuleToggle" Header="Desktop capsule"/>
+                            <ToggleSwitch x:Name="MotionToggle" Header="Reduce Iris motion"/>
+                            <TextBlock x:Name="ShortcutStatus" TextWrapping="Wrap" Opacity=".72"/>
+                            <TextBlock Text="Privacy" FontSize="19" FontWeight="SemiBold"/>
+                            <TextBlock Text="Chats and memories are stored in your Windows user profile. Sending a turn shares recent messages, matching memories and explicitly attached text with the selected provider. Windows protects saved API keys for your user account." TextWrapping="Wrap" Opacity=".72"/>
+                            <Button Content="Save settings" Click="SaveSettings" Style="{ThemeResource AccentButtonStyle}"/>
+                            <TextBlock Text="Iris for Windows · AriZe" Opacity=".58"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+        </NavigationView>
+    </Grid>
+</Window>
